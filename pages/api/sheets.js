@@ -1,56 +1,10 @@
-// Google Sheets API - GERÇEK ENTEGRASYON
-// Vercel ortam değişkenlerinden credentials alınır
+// Vercel KV ile Kalıcı Veri Saklama
+import { kv } from '@vercel/kv';
 
 const SPREADSHEET_ID = '1ywjQGfHS6k4hqNiitkOUZ2HytTnu7N9Z5PO9A_yXMUY';
 
-// Sheet name to index mapping
-const SHEET_NAMES = {
-  'Eğitim Takip': 'Eğitim Takip',
-  'Çekim Takip': 'Çekim Takip',
-  'Montaj Takip': 'Montaj Takip'
-};
-
-// Basit Google Sheets API client (google-spreadsheet kullanmadan)
-async function getSheetData(sheetName) {
-  // Google Sheets API kullanmak için credentials gerekir
-  // Şimdilik mock data döndürüyoruz
-  return global.storage?.[sheetName] || [];
-}
-
-async function appendRow(sheetName, rowData) {
-  if (!global.storage) global.storage = {};
-  if (!global.storage[sheetName]) global.storage[sheetName] = [];
-
-  const newRow = {
-    ...rowData,
-    id: Date.now() + Math.random(),
-    createdAt: new Date().toISOString()
-  };
-
-  global.storage[sheetName].push(newRow);
-  return newRow;
-}
-
-async function updateRowData(sheetName, rowIndex, rowData) {
-  if (global.storage?.[sheetName]?.[rowIndex]) {
-    const existingId = global.storage[sheetName][rowIndex].id;
-    global.storage[sheetName][rowIndex] = {
-      ...rowData,
-      id: existingId,
-      updatedAt: new Date().toISOString()
-    };
-    return global.storage[sheetName][rowIndex];
-  }
-  return null;
-}
-
-async function deleteRowData(sheetName, rowIndex) {
-  if (global.storage?.[sheetName]) {
-    global.storage[sheetName].splice(rowIndex, 1);
-    return true;
-  }
-  return false;
-}
+// KV keys
+const getKey = (sheetName) => `sheet:${sheetName}`;
 
 export default async function handler(req, res) {
   const { method } = req;
@@ -68,7 +22,18 @@ export default async function handler(req, res) {
   try {
     if (method === 'GET') {
       const { sheet } = req.query;
-      const data = await getSheetData(sheet);
+      const key = getKey(sheet);
+
+      // KV'den veri çek
+      let data = await kv.get(key);
+
+      // Eğer veri yoksa boş array başlat
+      if (!data) {
+        data = [];
+        await kv.set(key, data);
+      }
+
+      console.log(`GET ${sheet}: ${data.length} items`);
       return res.status(200).json({ 
         data, 
         success: true,
@@ -78,40 +43,82 @@ export default async function handler(req, res) {
 
     if (method === 'POST') {
       const { sheetName, rowData } = req.body;
-      const newRow = await appendRow(sheetName, rowData);
-      const allData = await getSheetData(sheetName);
+      const key = getKey(sheetName);
+
+      // Mevcut veriyi al
+      let data = await kv.get(key) || [];
+
+      // Yeni satır ekle
+      const newRow = {
+        ...rowData,
+        id: Date.now() + Math.random(),
+        createdAt: new Date().toISOString()
+      };
+
+      data.push(newRow);
+
+      // KV'ye kaydet
+      await kv.set(key, data);
+
+      console.log(`POST ${sheetName}: Added item, total: ${data.length}`);
       return res.status(200).json({ 
         success: true, 
-        data: allData,
+        data: data,
         newRow,
-        message: '✅ Veri başarıyla eklendi!'
+        message: '✅ Veri başarıyla eklendi ve kalıcı olarak kaydedildi!'
       });
     }
 
     if (method === 'PUT') {
       const { sheetName, rowIndex, rowData } = req.body;
-      const updated = await updateRowData(sheetName, rowIndex, rowData);
-      if (updated) {
+      const key = getKey(sheetName);
+
+      // Mevcut veriyi al
+      let data = await kv.get(key) || [];
+
+      if (data[rowIndex]) {
+        const existingId = data[rowIndex].id;
+        data[rowIndex] = {
+          ...rowData,
+          id: existingId,
+          updatedAt: new Date().toISOString()
+        };
+
+        // KV'ye kaydet
+        await kv.set(key, data);
+
+        console.log(`PUT ${sheetName}[${rowIndex}]: Updated`);
         return res.status(200).json({ 
           success: true,
-          data: updated,
+          data: data[rowIndex],
           message: '✅ Veri başarıyla güncellendi!'
         });
       }
+
       return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
     }
 
     if (method === 'DELETE') {
       const { sheetName, rowIndex } = req.body;
-      const deleted = await deleteRowData(sheetName, rowIndex);
-      if (deleted) {
-        const allData = await getSheetData(sheetName);
+      const key = getKey(sheetName);
+
+      // Mevcut veriyi al
+      let data = await kv.get(key) || [];
+
+      if (rowIndex < data.length) {
+        data.splice(rowIndex, 1);
+
+        // KV'ye kaydet
+        await kv.set(key, data);
+
+        console.log(`DELETE ${sheetName}[${rowIndex}]: Deleted, remaining: ${data.length}`);
         return res.status(200).json({ 
           success: true,
-          data: allData,
+          data: data,
           message: '✅ Veri başarıyla silindi!'
         });
       }
+
       return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
     }
 
@@ -119,6 +126,31 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('API Error:', error);
+
+    // Eğer KV bağlantısı yoksa fallback olarak global storage kullan
+    if (error.message?.includes('KV') || error.message?.includes('VERCEL')) {
+      console.warn('⚠️ Vercel KV not configured, using fallback storage');
+
+      // Fallback to global storage
+      if (!global.storage) global.storage = {};
+
+      if (method === 'GET') {
+        const { sheet } = req.query;
+        const data = global.storage[sheet] || [];
+        return res.status(200).json({ data, success: true, fallback: true });
+      }
+
+      if (method === 'POST') {
+        const { sheetName, rowData } = req.body;
+        if (!global.storage[sheetName]) global.storage[sheetName] = [];
+        const newRow = { ...rowData, id: Date.now() };
+        global.storage[sheetName].push(newRow);
+        return res.status(200).json({ success: true, data: global.storage[sheetName], fallback: true });
+      }
+
+      // Diğer methodlar için de fallback eklenebilir
+    }
+
     return res.status(500).json({ 
       success: false, 
       error: error.message || 'Sunucu hatası'
