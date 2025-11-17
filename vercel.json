@@ -1,0 +1,7 @@
+{
+  "env": {
+    "GOOGLE_SHEETS_ID": "1ywjQGfHS6k4hqNiitkOUZ2HytTnu7N9Z5PO9A_yXMUY"
+  },
+  "regions": ["iad1"],
+  "framework": "nextjs"
+}
