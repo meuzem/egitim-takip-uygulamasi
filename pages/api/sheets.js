@@ -1,50 +1,28 @@
-// API Route - Neon PostgreSQL ile Kalıcı Veri Saklama
-import { db } from '../../db';
-import { egitimTakip, cekimTakip, montajTakip } from '../../db/schema';
-import { eq } from 'drizzle-orm';
+// Simplified API - Neon PostgreSQL
+import { neon } from '@neondatabase/serverless';
 
-// Sheet name to table mapping
-const tableMap = {
-  'Eğitim Takip': egitimTakip,
-  'Çekim Takip': cekimTakip,
-  'Montaj Takip': montajTakip,
+// Fallback storage
+if (!global.storage) {
+  global.storage = {
+    'Eğitim Takip': [],
+    'Çekim Takip': [],
+    'Montaj Takip': []
+  };
+}
+
+// Helper: Table name mapping
+const getTableName = (sheetName) => {
+  const map = {
+    'Eğitim Takip': 'egitim_takip',
+    'Çekim Takip': 'cekim_takip',
+    'Montaj Takip': 'montaj_takip'
+  };
+  return map[sheetName];
 };
 
-// Field name mapping (camelCase to snake_case ve tam tersi)
-const fieldMapping = {
-  egitimTakip: {
-    dal: 'dal', alan: 'alan', bolum: 'bolum', egitim: 'egitim',
-    egitmen: 'egitmen', icerikTakip: 'icerik_takip', durum: 'durum',
-    icerikBaslama: 'icerik_baslama', cekimBaslama: 'cekim_baslama',
-    montajBaslama: 'montaj_baslama', montajSorumlusu: 'montaj_sorumlusu',
-    yayinTarihi: 'yayin_tarihi', notlar: 'notlar'
-  },
-  cekimTakip: {
-    egitimAdi: 'egitim_adi', egitmenAdi: 'egitmen_adi',
-    cekimSorumlusu: 'cekim_sorumlusu', videoAdi: 'video_adi',
-    cekimTarihi: 'cekim_tarihi', onCekim: 'on_cekim', izlence: 'izlence',
-    isik: 'isik', fotografCekimi: 'fotograf_cekimi',
-    fotografTarih: 'fotograf_tarih', cekimKontrol: 'cekim_kontrol',
-    kontrolTarih: 'kontrol_tarih', tasnif: 'tasnif', dipSes: 'dip_ses',
-    cekimTamamlandi: 'cekim_tamamlandi', synology: 'synology',
-    synologyKlasor: 'synology_klasor', videKodu: 'vide_kodu',
-    cekimYapanlar: 'cekim_yapanlar', notlar: 'notlar'
-  },
-  montajTakip: {
-    egitimAdi: 'egitim_adi', egitmenAdi: 'egitmen_adi',
-    montajSorumlusu: 'montaj_sorumlusu', videoAdi: 'video_adi',
-    icerikUzmani: 'icerik_uzmani', montajBaslama: 'montaj_baslama',
-    revizeTarihi: 'revize_tarihi', isik: 'isik',
-    montajDurumu: 'montaj_durumu', montajTamamlandi: 'montaj_tamamlandi',
-    notlar: 'notlar'
-  }
-};
-
-// Fallback storage (Neon bağlantısı yoksa)
-if (!global.storage) global.storage = {
-  'Eğitim Takip': [],
-  'Çekim Takip': [],
-  'Montaj Takip': []
+// Helper: Check if Neon is configured
+const isNeonConfigured = () => {
+  return !!process.env.DATABASE_URL && process.env.DATABASE_URL.includes('neon');
 };
 
 export default async function handler(req, res) {
@@ -60,22 +38,28 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  try {
-    const table = tableMap[req.query.sheet || req.body?.sheetName];
-    const useFallback = !process.env.DATABASE_URL || !table;
+  const useNeon = isNeonConfigured();
 
-    if (useFallback) {
-      console.warn('⚠️ Neon not configured, using fallback storage');
+  try {
+    if (!useNeon) {
+      console.warn('⚠️ DATABASE_URL not configured, using fallback storage');
       return handleFallback(req, res, method);
     }
 
-    if (method === 'GET') {
-      const { sheet } = req.query;
-      const data = await db.select().from(table);
+    const sql = neon(process.env.DATABASE_URL);
+    const sheetName = req.query.sheet || req.body?.sheetName;
+    const tableName = getTableName(sheetName);
 
-      console.log(`GET ${sheet}: ${data.length} items from Neon`);
+    if (!tableName) {
+      return res.status(400).json({ error: 'Invalid sheet name' });
+    }
+
+    if (method === 'GET') {
+      const result = await sql\`SELECT * FROM \${sql(tableName)} ORDER BY id DESC\`;
+      console.log(\`GET \${sheetName}: \${result.length} items from Neon\`);
+
       return res.status(200).json({ 
-        data, 
+        data: result, 
         success: true,
         source: 'neon',
         timestamp: new Date().toISOString()
@@ -83,82 +67,90 @@ export default async function handler(req, res) {
     }
 
     if (method === 'POST') {
-      const { sheetName, rowData } = req.body;
+      const { rowData } = req.body;
 
-      const insertData = {
-        ...rowData,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+      // Build insert query dynamically
+      const columns = Object.keys(rowData);
+      const values = Object.values(rowData);
+      const placeholders = values.map((_, i) => \`$\${i + 1}\`).join(', ');
 
-      const result = await db.insert(table).values(insertData).returning();
-      const allData = await db.select().from(table);
+      const query = \`
+        INSERT INTO \${tableName} (\${columns.join(', ')}, created_at, updated_at)
+        VALUES (\${placeholders}, NOW(), NOW())
+        RETURNING *
+      \`;
 
-      console.log(`POST ${sheetName}: Added to Neon, total: ${allData.length}`);
+      const result = await sql(query, values);
+      const allData = await sql\`SELECT * FROM \${sql(tableName)} ORDER BY id DESC\`;
+
+      console.log(\`POST \${sheetName}: Added to Neon\`);
       return res.status(200).json({ 
         success: true, 
         data: allData,
         newRow: result[0],
         source: 'neon',
-        message: '✅ Veri başarıyla kaydedildi (Neon PostgreSQL)'
+        message: '✅ Veri Neon PostgreSQL veritabanına kaydedildi!'
       });
     }
 
     if (method === 'PUT') {
-      const { sheetName, rowIndex, rowData } = req.body;
+      const { rowIndex, rowData } = req.body;
 
-      // Önce tüm veriyi al
-      const allData = await db.select().from(table);
+      // Get all records to find the ID
+      const allRecords = await sql\`SELECT * FROM \${sql(tableName)} ORDER BY id DESC\`;
 
-      if (allData[rowIndex]) {
-        const recordId = allData[rowIndex].id;
-
-        const updateData = {
-          ...rowData,
-          updatedAt: new Date()
-        };
-
-        const result = await db
-          .update(table)
-          .set(updateData)
-          .where(eq(table.id, recordId))
-          .returning();
-
-        console.log(`PUT ${sheetName}[${rowIndex}]: Updated in Neon`);
-        return res.status(200).json({ 
-          success: true,
-          data: result[0],
-          source: 'neon',
-          message: '✅ Veri başarıyla güncellendi'
-        });
+      if (!allRecords[rowIndex]) {
+        return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
       }
 
-      return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+      const recordId = allRecords[rowIndex].id;
+
+      // Build update query
+      const updates = Object.entries(rowData)
+        .map(([key, value], i) => \`\${key} = $\${i + 1}\`)
+        .join(', ');
+      const values = Object.values(rowData);
+
+      const query = \`
+        UPDATE \${tableName}
+        SET \${updates}, updated_at = NOW()
+        WHERE id = $\${values.length + 1}
+        RETURNING *
+      \`;
+
+      const result = await sql(query, [...values, recordId]);
+
+      console.log(\`PUT \${sheetName}[\${rowIndex}]: Updated in Neon\`);
+      return res.status(200).json({ 
+        success: true,
+        data: result[0],
+        source: 'neon',
+        message: '✅ Veri güncellendi!'
+      });
     }
 
     if (method === 'DELETE') {
-      const { sheetName, rowIndex } = req.body;
+      const { rowIndex } = req.body;
 
-      // Önce tüm veriyi al
-      const allData = await db.select().from(table);
+      // Get all records to find the ID
+      const allRecords = await sql\`SELECT * FROM \${sql(tableName)} ORDER BY id DESC\`;
 
-      if (allData[rowIndex]) {
-        const recordId = allData[rowIndex].id;
-
-        await db.delete(table).where(eq(table.id, recordId));
-
-        const remainingData = await db.select().from(table);
-
-        console.log(`DELETE ${sheetName}[${rowIndex}]: Deleted from Neon, remaining: ${remainingData.length}`);
-        return res.status(200).json({ 
-          success: true,
-          data: remainingData,
-          source: 'neon',
-          message: '✅ Veri başarıyla silindi'
-        });
+      if (!allRecords[rowIndex]) {
+        return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
       }
 
-      return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+      const recordId = allRecords[rowIndex].id;
+
+      await sql\`DELETE FROM \${sql(tableName)} WHERE id = \${recordId}\`;
+      const remainingData = await sql\`SELECT * FROM \${sql(tableName)} ORDER BY id DESC\`;
+
+      console.log(\`DELETE \${sheetName}[\${rowIndex}]: Deleted from Neon\`);
+      return res.status(200).json({ 
+        success: true,
+        data: remainingData,
+        source: 'neon',
+        message: '✅ Veri silindi!'
+      });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
@@ -167,54 +159,63 @@ export default async function handler(req, res) {
     console.error('API Error:', error);
 
     // Neon hatası varsa fallback'e geç
-    if (error.message?.includes('database') || error.message?.includes('connect')) {
-      console.warn('⚠️ Neon error, switching to fallback');
-      return handleFallback(req, res, method);
-    }
-
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message || 'Sunucu hatası'
-    });
+    console.warn('⚠️ Neon error, switching to fallback:', error.message);
+    return handleFallback(req, res, method);
   }
 }
 
-// Fallback handler
+// Fallback handler (global storage)
 function handleFallback(req, res, method) {
+  const sheetName = req.query.sheet || req.body?.sheetName;
+
   if (method === 'GET') {
-    const { sheet } = req.query;
-    const data = global.storage[sheet] || [];
-    return res.status(200).json({ data, success: true, source: 'fallback' });
+    const data = global.storage[sheetName] || [];
+    return res.status(200).json({ 
+      data, 
+      success: true, 
+      source: 'fallback',
+      message: '⚠️ Geçici bellekten okunuyor. DATABASE_URL ekleyin.'
+    });
   }
 
   if (method === 'POST') {
-    const { sheetName, rowData } = req.body;
+    const { rowData } = req.body;
     if (!global.storage[sheetName]) global.storage[sheetName] = [];
     const newRow = { ...rowData, id: Date.now() + Math.random() };
     global.storage[sheetName].push(newRow);
     return res.status(200).json({ 
       success: true, 
-      data: global.storage[sheetName], 
+      data: global.storage[sheetName],
+      newRow,
       source: 'fallback',
-      message: '⚠️ Geçici bellekte kaydedildi. Neon bağlantısı yapın.'
+      message: '⚠️ Geçici bellekte kaydedildi. DATABASE_URL ekleyin.'
     });
   }
 
   if (method === 'PUT') {
-    const { sheetName, rowIndex, rowData } = req.body;
+    const { rowIndex, rowData } = req.body;
     if (global.storage[sheetName]?.[rowIndex]) {
       const id = global.storage[sheetName][rowIndex].id;
       global.storage[sheetName][rowIndex] = { ...rowData, id };
-      return res.status(200).json({ success: true, source: 'fallback' });
+      return res.status(200).json({ 
+        success: true, 
+        source: 'fallback',
+        message: '⚠️ Geçici bellekte güncellendi.'
+      });
     }
     return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
   }
 
   if (method === 'DELETE') {
-    const { sheetName, rowIndex } = req.body;
+    const { rowIndex } = req.body;
     if (global.storage[sheetName]) {
       global.storage[sheetName].splice(rowIndex, 1);
-      return res.status(200).json({ success: true, source: 'fallback' });
+      return res.status(200).json({ 
+        success: true,
+        data: global.storage[sheetName],
+        source: 'fallback',
+        message: '⚠️ Geçici bellekten silindi.'
+      });
     }
     return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
   }
