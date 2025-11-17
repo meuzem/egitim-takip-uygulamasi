@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { getSheetsData, addRowToSheet, updateRow, deleteRow } from '../lib/sheets'
 
 export default function EgitimTakip() {
   const [data, setData] = useState([])
   const [filteredData, setFilteredData] = useState([])
+  const [showModal, setShowModal] = useState(false)
+  const [editingIndex, setEditingIndex] = useState(null)
+  const [formData, setFormData] = useState({})
+
   const [filters, setFilters] = useState({
     dal: '',
     alan: '',
@@ -17,13 +22,7 @@ export default function EgitimTakip() {
   const montajSorumlusuOptions = ['Ayşe Nur Yazıcı', 'Hasan Taşdemir', 'Hatice Yürük', 'Cihan Çimen']
 
   useEffect(() => {
-    // Google Sheets'ten veri çekmek için API endpoint'i eklenecek
-    // Şimdilik örnek veri
-    const sampleData = [
-      { dal: 'Mesleki ve Teknik', alan: 'Bilişim Teknolojileri', bolum: 'Web Geliştirme', egitim: 'React Temelleri', egitmen: 'Ahmet Yılmaz', icerikTakip: 'Meltem Ermez', durum: 'Çekimde', icerikBaslama: '2024-01-15', cekimBaslama: '2024-02-01', montajBaslama: '', montajSorumlusu: '', yayinTarihi: '', notlar: '' }
-    ]
-    setData(sampleData)
-    setFilteredData(sampleData)
+    loadData()
   }, [])
 
   useEffect(() => {
@@ -34,12 +33,62 @@ export default function EgitimTakip() {
     setFilteredData(filtered)
   }, [filters, data])
 
+  const loadData = async () => {
+    const result = await getSheetsData('Eğitim Takip')
+    setData(result.data || [])
+    setFilteredData(result.data || [])
+  }
+
+  const openModal = (index = null) => {
+    if (index !== null) {
+      setEditingIndex(index)
+      setFormData(filteredData[index])
+    } else {
+      setEditingIndex(null)
+      setFormData({
+        dal: '', alan: '', bolum: '', egitim: '', egitmen: '', icerikTakip: '',
+        durum: '', icerikBaslama: '', cekimBaslama: '', montajBaslama: '',
+        montajSorumlusu: '', yayinTarihi: '', notlar: ''
+      })
+    }
+    setShowModal(true)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    try {
+      if (editingIndex !== null) {
+        await updateRow('Eğitim Takip', editingIndex, formData)
+      } else {
+        await addRowToSheet('Eğitim Takip', formData)
+      }
+      setShowModal(false)
+      loadData()
+      alert('Başarıyla kaydedildi!')
+    } catch (error) {
+      alert('Hata oluştu: ' + error.message)
+    }
+  }
+
+  const handleDelete = async (index) => {
+    if (confirm('Bu kaydı silmek istediğinizden emin misiniz?')) {
+      try {
+        await deleteRow('Eğitim Takip', index)
+        loadData()
+        alert('Kayıt silindi!')
+      } catch (error) {
+        alert('Hata oluştu: ' + error.message)
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold text-indigo-600">📚 Eğitim Takip</Link>
           <div className="space-x-4">
+            <Link href="/" className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition">🏠 Ana Sayfa</Link>
             <Link href="/cekim-takip" className="text-gray-600 hover:text-indigo-600">Çekim Takip</Link>
             <Link href="/montaj-takip" className="text-gray-600 hover:text-indigo-600">Montaj Takip</Link>
             <Link href="/dashboard" className="text-gray-600 hover:text-indigo-600">Dashboard</Link>
@@ -49,7 +98,12 @@ export default function EgitimTakip() {
 
       <main className="container mx-auto px-6 py-8">
         <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4">🔍 Filtreler</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold">🔍 Filtreler</h2>
+            <button onClick={() => openModal()} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+              ➕ Yeni Eğitim Ekle
+            </button>
+          </div>
           <div className="grid md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">Dal</label>
@@ -79,10 +133,11 @@ export default function EgitimTakip() {
           <div className="p-6 border-b">
             <h2 className="text-xl font-bold">📋 Eğitim Listesi ({filteredData.length})</h2>
           </div>
-          <div className="table-container">
+          <div className="table-container overflow-x-auto">
             <table>
               <thead>
                 <tr>
+                  <th>İşlemler</th>
                   <th>DAL</th>
                   <th>ALAN</th>
                   <th>BÖLÜM</th>
@@ -101,6 +156,10 @@ export default function EgitimTakip() {
               <tbody>
                 {filteredData.map((row, index) => (
                   <tr key={index}>
+                    <td className="whitespace-nowrap">
+                      <button onClick={() => openModal(index)} className="px-3 py-1 bg-blue-500 text-white rounded mr-2 hover:bg-blue-600">✏️ Düzenle</button>
+                      <button onClick={() => handleDelete(index)} className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">🗑️ Sil</button>
+                    </td>
                     <td>{row.dal}</td>
                     <td>{row.alan}</td>
                     <td>{row.bolum}</td>
@@ -116,11 +175,95 @@ export default function EgitimTakip() {
                     <td>{row.notlar}</td>
                   </tr>
                 ))}
+                {filteredData.length === 0 && (
+                  <tr><td colSpan="14" className="text-center py-8 text-gray-500">Henüz veri yok. Yeni eğitim eklemek için yukarıdaki butonu kullanın.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </main>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold mb-4">{editingIndex !== null ? '✏️ Eğitimi Düzenle' : '➕ Yeni Eğitim Ekle'}</h3>
+            <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Dal *</label>
+                <select value={formData.dal || ''} onChange={(e) => setFormData({...formData, dal: e.target.value})} required className="w-full">
+                  <option value="">Seçiniz</option>
+                  {dalOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Alan *</label>
+                <select value={formData.alan || ''} onChange={(e) => setFormData({...formData, alan: e.target.value})} required className="w-full">
+                  <option value="">Seçiniz</option>
+                  {alanOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Bölüm</label>
+                <input type="text" value={formData.bolum || ''} onChange={(e) => setFormData({...formData, bolum: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Eğitim Adı *</label>
+                <input type="text" value={formData.egitim || ''} onChange={(e) => setFormData({...formData, egitim: e.target.value})} required className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Eğitmen</label>
+                <input type="text" value={formData.egitmen || ''} onChange={(e) => setFormData({...formData, egitmen: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">İçerik Takip</label>
+                <select value={formData.icerikTakip || ''} onChange={(e) => setFormData({...formData, icerikTakip: e.target.value})} className="w-full">
+                  <option value="">Seçiniz</option>
+                  {icerikTakipOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Durum</label>
+                <select value={formData.durum || ''} onChange={(e) => setFormData({...formData, durum: e.target.value})} className="w-full">
+                  <option value="">Seçiniz</option>
+                  {durumOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">İçerik Başlama Tarihi</label>
+                <input type="date" value={formData.icerikBaslama || ''} onChange={(e) => setFormData({...formData, icerikBaslama: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Çekim Başlama Tarihi</label>
+                <input type="date" value={formData.cekimBaslama || ''} onChange={(e) => setFormData({...formData, cekimBaslama: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Montaj Başlama Tarihi</label>
+                <input type="date" value={formData.montajBaslama || ''} onChange={(e) => setFormData({...formData, montajBaslama: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Montaj Sorumlusu</label>
+                <select value={formData.montajSorumlusu || ''} onChange={(e) => setFormData({...formData, montajSorumlusu: e.target.value})} className="w-full">
+                  <option value="">Seçiniz</option>
+                  {montajSorumlusuOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Yayın Tarihi</label>
+                <input type="date" value={formData.yayinTarihi || ''} onChange={(e) => setFormData({...formData, yayinTarihi: e.target.value})} className="w-full" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-2">Notlar</label>
+                <textarea value={formData.notlar || ''} onChange={(e) => setFormData({...formData, notlar: e.target.value})} rows="3" className="w-full"></textarea>
+              </div>
+              <div className="md:col-span-2 flex justify-end space-x-3 mt-4">
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">İptal</button>
+                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">💾 Kaydet</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
