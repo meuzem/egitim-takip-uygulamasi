@@ -2,6 +2,8 @@
 
 Modern ve profesyonel eğitim takip sistemi. React.js ve Next.js ile geliştirilmiş, Google Sheets entegrasyonu ile veri yönetimi.
 
+🔗 **Canlı Demo:** [egitim-takip-otomasyonu.vercel.app](https://egitim-takip-otomasyonu.vercel.app)
+
 ## ✨ Özellikler
 
 ### 📖 Eğitim Takip
@@ -39,24 +41,24 @@ Modern ve profesyonel eğitim takip sistemi. React.js ve Next.js ile geliştiril
 ### Adımlar
 
 1. **Repository'yi klonlayın:**
-\`\`\`bash
+```bash
 git clone https://github.com/meuzem/egitim-takip-uygulamasi.git
 cd egitim-takip-uygulamasi
-\`\`\`
+```
 
 2. **Bağımlılıkları yükleyin:**
-\`\`\`bash
+```bash
 npm install
 # veya
 yarn install
-\`\`\`
+```
 
 3. **Geliştirme sunucusunu başlatın:**
-\`\`\`bash
+```bash
 npm run dev
 # veya
 yarn dev
-\`\`\`
+```
 
 4. **Tarayıcıda açın:**
 [http://localhost:3000](http://localhost:3000)
@@ -72,7 +74,7 @@ yarn dev
 
 ## 📁 Proje Yapısı
 
-\`\`\`
+```
 egitim-takip-uygulamasi/
 ├── pages/
 │   ├── index.js           # Ana sayfa
@@ -86,7 +88,7 @@ egitim-takip-uygulamasi/
 ├── package.json
 ├── next.config.js
 └── README.md
-\`\`\`
+```
 
 ## 🎨 Sayfalar
 
@@ -121,11 +123,11 @@ Modern ve kullanıcı dostu arayüz ile tüm bölümlere kolay erişim.
 3. Service Account oluşturun
 4. `.env.local` dosyasına kimlik bilgilerinizi ekleyin:
 
-\`\`\`env
+```env
 GOOGLE_SHEETS_ID=your_sheet_id_here
 GOOGLE_CLIENT_EMAIL=your_email@project.iam.gserviceaccount.com
 GOOGLE_PRIVATE_KEY=your_private_key_here
-\`\`\`
+```
 
 ## 📊 Veritabanı Yapısı
 
