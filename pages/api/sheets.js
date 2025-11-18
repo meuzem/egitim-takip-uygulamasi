@@ -139,11 +139,12 @@ export default async function handler(req, res) {
         const keys = Object.keys(mappedData);
         const vals = Object.values(mappedData);
 
-        // Build the query parts as arrays for Neon
-        const insertResult = await sql(
-          `INSERT INTO ${tableName} (${keys.join(', ')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING *`,
-          vals
-        );
+        // Build the query with proper string concatenation
+        const columns = keys.join(', ');
+        const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+        const insertQuery = 'INSERT INTO ' + tableName + ' (' + columns + ') VALUES (' + placeholders + ') RETURNING *';
+
+        const insertResult = await sql(insertQuery, vals);
 
         const allData = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
 
