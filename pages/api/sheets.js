@@ -141,13 +141,22 @@ export default async function handler(req, res) {
         const values = Object.values(mappedData);
         const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
-        const insertQuery = `
-          INSERT INTO ${tableName} (${columns.join(', ')})
-          VALUES (${placeholders})
+        // Build dynamic INSERT query using Neon's tagged template
+        const columnList = sql.join(
+          columns.map(col => sql.identifier([col])),
+          sql`, `
+        );
+
+        const valuePlaceholders = sql.join(
+          values.map(val => sql`${val}`),
+          sql`, `
+        );
+
+        const insertResult = await sql`
+          INSERT INTO ${sql(tableName)} (${columnList})
+          VALUES (${valuePlaceholders})
           RETURNING *
         `;
-
-        const insertResult = await sql(insertQuery, values);
         const allData = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
 
         res.status(200).json({ 
@@ -167,155 +176,3 @@ export default async function handler(req, res) {
         return;
       }
     }
-
-    // PUT
-    if (req.method === 'PUT') {
-      try {
-        const { rowIndex, rowData } = req.body;
-
-        const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
-
-        if (!allRecords[rowIndex]) {
-          res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
-          return;
-        }
-
-        const recordId = allRecords[rowIndex].id;
-        
-        // Map frontend fields to database fields
-        const mappedData = mapFieldsToDB(rowData);
-        
-        const updateParts = Object.entries(mappedData).map(([key, value], i) => `${key} = $${i + 1}`);
-        const values = Object.values(mappedData);
-
-        const updateQuery = `
-          UPDATE ${tableName}
-          SET ${updateParts.join(', ')}
-          WHERE id = $${values.length + 1}
-          RETURNING *
-        `;
-
-        const result = await sql(updateQuery, [...values, recordId]);
-
-        res.status(200).json({ 
-          success: true,
-          data: result[0],
-          source: 'neon',
-          message: '✅ Güncellendi!'
-        });
-        return;
-      } catch (dbError) {
-        console.error('Update error:', dbError);
-        res.status(500).json({ 
-          success: false, 
-          error: dbError.message 
-        });
-        return;
-      }
-    }
-
-    // DELETE
-    if (req.method === 'DELETE') {
-      try {
-        const { rowIndex } = req.body;
-
-        const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
-
-        if (!allRecords[rowIndex]) {
-          res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
-          return;
-        }
-
-        const recordId = allRecords[rowIndex].id;
-
-        await sql`DELETE FROM ${sql(tableName)} WHERE id = ${recordId}`;
-        const remainingData = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
-
-        res.status(200).json({ 
-          success: true,
-          data: remainingData,
-          source: 'neon',
-          message: '✅ Silindi!'
-        });
-        return;
-      } catch (dbError) {
-        console.error('Delete error:', dbError);
-        res.status(500).json({ 
-          success: false, 
-          error: dbError.message 
-        });
-        return;
-      }
-    }
-
-    res.status(405).json({ error: 'Method not allowed: ' + req.method });
-  } catch (error) {
-    console.error('API Error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message || 'Server error'
-    });
-  }
-}
-
-// Fallback handler
-function handleFallback(req, res, sheetName) {
-  const method = req.method;
-
-  if (method === 'GET') {
-    const data = global.storage[sheetName] || [];
-    res.status(200).json({ 
-      data, 
-      success: true, 
-      source: 'fallback'
-    });
-    return;
-  }
-
-  if (method === 'POST') {
-    const { rowData } = req.body;
-    if (!global.storage[sheetName]) global.storage[sheetName] = [];
-    const newRow = { ...rowData, id: Date.now() };
-    global.storage[sheetName].push(newRow);
-    res.status(200).json({ 
-      success: true, 
-      data: global.storage[sheetName],
-      newRow,
-      source: 'fallback',
-      message: '⚠️ Geçici bellekte kaydedildi'
-    });
-    return;
-  }
-
-  if (method === 'PUT') {
-    const { rowIndex, rowData } = req.body;
-    if (global.storage[sheetName]?.[rowIndex]) {
-      const id = global.storage[sheetName][rowIndex].id;
-      global.storage[sheetName][rowIndex] = { ...rowData, id };
-      res.status(200).json({ 
-        success: true, 
-        source: 'fallback' 
-      });
-      return;
-    }
-    res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
-    return;
-  }
-
-  if (method === 'DELETE') {
-    const { rowIndex } = req.body;
-    if (global.storage[sheetName]) {
-      global.storage[sheetName].splice(rowIndex, 1);
-      res.status(200).json({ 
-        success: true,
-        data: global.storage[sheetName],
-        source: 'fallback' 
-      });
-      return;
-    }
-    res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
-    return;
-  }
-
-  res.status(405).json({ error: 'Method not allowed' });
-}
