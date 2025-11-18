@@ -1,4 +1,4 @@
-// API Route - Neon PostgreSQL (FIXED for Vercel)
+// API Route - Neon PostgreSQL (Vercel Compatible)
 import { neon } from '@neondatabase/serverless';
 
 // Global fallback storage
@@ -17,16 +17,26 @@ const tableMap = {
   'Montaj Takip': 'montaj_takip'
 };
 
+// Disable body parser size limit
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '1mb',
+    },
+  },
+};
+
 export default async function handler(req, res) {
-  // CORS headers - MUST be first
+  // CORS headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-  // Handle OPTIONS request (preflight)
+  // Handle OPTIONS
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
 
   try {
@@ -34,49 +44,51 @@ export default async function handler(req, res) {
     const tableName = tableMap[sheetName];
 
     if (!tableName) {
-      return res.status(400).json({ 
+      res.status(400).json({ 
         success: false, 
         error: 'Invalid sheet name: ' + sheetName 
       });
+      return;
     }
 
-    // Check if DATABASE_URL exists
+    // Check DATABASE_URL
     const hasDatabase = process.env.DATABASE_URL && process.env.DATABASE_URL.length > 0;
 
     if (!hasDatabase) {
-      console.warn('⚠️ DATABASE_URL not set, using fallback');
-      return handleFallback(req, res, sheetName);
+      console.warn('⚠️ DATABASE_URL not set');
+      handleFallback(req, res, sheetName);
+      return;
     }
 
     const sql = neon(process.env.DATABASE_URL);
 
-    // GET - Read data
+    // GET
     if (req.method === 'GET') {
       try {
-        const query = `SELECT * FROM ${tableName} ORDER BY id DESC`;
-        const result = await sql(query);
-
-        return res.status(200).json({ 
+        const result = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+        res.status(200).json({ 
           data: result, 
           success: true,
           source: 'neon'
         });
+        return;
       } catch (dbError) {
         console.error('Database error:', dbError);
-        return handleFallback(req, res, sheetName);
+        handleFallback(req, res, sheetName);
+        return;
       }
     }
 
-    // POST - Create data
+    // POST
     if (req.method === 'POST') {
       try {
         const { rowData } = req.body;
 
         if (!rowData) {
-          return res.status(400).json({ error: 'rowData is required' });
+          res.status(400).json({ error: 'rowData is required' });
+          return;
         }
 
-        // Get column names and values
         const columns = Object.keys(rowData);
         const values = Object.values(rowData);
         const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
@@ -88,35 +100,36 @@ export default async function handler(req, res) {
         `;
 
         const insertResult = await sql(insertQuery, values);
-        const allData = await sql(`SELECT * FROM ${tableName} ORDER BY id DESC`);
+        const allData = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
 
-        return res.status(200).json({ 
+        res.status(200).json({ 
           success: true, 
           data: allData,
           newRow: insertResult[0],
           source: 'neon',
-          message: '✅ Veri Neon PostgreSQL'e kaydedildi!'
+          message: '✅ Veri kaydedildi!'
         });
+        return;
       } catch (dbError) {
         console.error('Insert error:', dbError);
-        return res.status(500).json({ 
+        res.status(500).json({ 
           success: false, 
-          error: dbError.message,
-          fallback: true
+          error: dbError.message
         });
+        return;
       }
     }
 
-    // PUT - Update data
+    // PUT
     if (req.method === 'PUT') {
       try {
         const { rowIndex, rowData } = req.body;
 
-        // Get all records to find the correct ID
-        const allRecords = await sql(`SELECT * FROM ${tableName} ORDER BY id DESC`);
+        const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
 
         if (!allRecords[rowIndex]) {
-          return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+          res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+          return;
         }
 
         const recordId = allRecords[rowIndex].id;
@@ -132,61 +145,63 @@ export default async function handler(req, res) {
 
         const result = await sql(updateQuery, [...values, recordId]);
 
-        return res.status(200).json({ 
+        res.status(200).json({ 
           success: true,
           data: result[0],
           source: 'neon',
-          message: '✅ Veri güncellendi!'
+          message: '✅ Güncellendi!'
         });
+        return;
       } catch (dbError) {
         console.error('Update error:', dbError);
-        return res.status(500).json({ 
+        res.status(500).json({ 
           success: false, 
           error: dbError.message 
         });
+        return;
       }
     }
 
-    // DELETE - Delete data
+    // DELETE
     if (req.method === 'DELETE') {
       try {
         const { rowIndex } = req.body;
 
-        const allRecords = await sql(`SELECT * FROM ${tableName} ORDER BY id DESC`);
+        const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
 
         if (!allRecords[rowIndex]) {
-          return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+          res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+          return;
         }
 
         const recordId = allRecords[rowIndex].id;
 
-        await sql(`DELETE FROM ${tableName} WHERE id = $1`, [recordId]);
-        const remainingData = await sql(`SELECT * FROM ${tableName} ORDER BY id DESC`);
+        await sql`DELETE FROM ${sql(tableName)} WHERE id = ${recordId}`;
+        const remainingData = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
 
-        return res.status(200).json({ 
+        res.status(200).json({ 
           success: true,
           data: remainingData,
           source: 'neon',
-          message: '✅ Veri silindi!'
+          message: '✅ Silindi!'
         });
+        return;
       } catch (dbError) {
         console.error('Delete error:', dbError);
-        return res.status(500).json({ 
+        res.status(500).json({ 
           success: false, 
           error: dbError.message 
         });
+        return;
       }
     }
 
-    // If method not supported
-    return res.status(405).json({ error: 'Method not allowed: ' + req.method });
-
+    res.status(405).json({ error: 'Method not allowed: ' + req.method });
   } catch (error) {
     console.error('API Error:', error);
-    return res.status(500).json({ 
+    res.status(500).json({ 
       success: false, 
-      error: error.message || 'Server error',
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message || 'Server error'
     });
   }
 }
@@ -197,12 +212,12 @@ function handleFallback(req, res, sheetName) {
 
   if (method === 'GET') {
     const data = global.storage[sheetName] || [];
-    return res.status(200).json({ 
+    res.status(200).json({ 
       data, 
       success: true, 
-      source: 'fallback',
-      message: '⚠️ Geçici bellekten okunuyor'
+      source: 'fallback'
     });
+    return;
   }
 
   if (method === 'POST') {
@@ -210,13 +225,14 @@ function handleFallback(req, res, sheetName) {
     if (!global.storage[sheetName]) global.storage[sheetName] = [];
     const newRow = { ...rowData, id: Date.now() };
     global.storage[sheetName].push(newRow);
-    return res.status(200).json({ 
+    res.status(200).json({ 
       success: true, 
       data: global.storage[sheetName],
       newRow,
       source: 'fallback',
       message: '⚠️ Geçici bellekte kaydedildi'
     });
+    return;
   }
 
   if (method === 'PUT') {
@@ -224,26 +240,30 @@ function handleFallback(req, res, sheetName) {
     if (global.storage[sheetName]?.[rowIndex]) {
       const id = global.storage[sheetName][rowIndex].id;
       global.storage[sheetName][rowIndex] = { ...rowData, id };
-      return res.status(200).json({ 
+      res.status(200).json({ 
         success: true, 
         source: 'fallback' 
       });
+      return;
     }
-    return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+    res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+    return;
   }
 
   if (method === 'DELETE') {
     const { rowIndex } = req.body;
     if (global.storage[sheetName]) {
       global.storage[sheetName].splice(rowIndex, 1);
-      return res.status(200).json({ 
+      res.status(200).json({ 
         success: true,
         data: global.storage[sheetName],
         source: 'fallback' 
       });
+      return;
     }
-    return res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+    res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+    return;
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  res.status(405).json({ error: 'Method not allowed' });
 }
