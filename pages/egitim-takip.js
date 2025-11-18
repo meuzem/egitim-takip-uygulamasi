@@ -62,8 +62,8 @@ export default function EgitimTakip() {
       } else {
         await addRowToSheet('Eğitim Takip', formData)
       }
+      await loadData()
       setShowModal(false)
-      loadData()
       alert('Başarıyla kaydedildi!')
     } catch (error) {
       alert('Hata oluştu: ' + error.message)
