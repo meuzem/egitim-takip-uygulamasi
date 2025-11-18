@@ -49,7 +49,7 @@ const fieldMapper = {
 function mapFieldsToDB(data) {
   const mapped = {};
   for (const [key, value] of Object.entries(data)) {
-    if (value !== undefined && value !== null && value !== '') {
+    if (value !== undefined && value !== null) {
       const dbKey = fieldMapper[key] || key;
       mapped[dbKey] = value;
     }
