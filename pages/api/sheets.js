@@ -1,24 +1,16 @@
-// API Route - Neon PostgreSQL (Vercel Compatible with Field Mapper)
+// API Route - Neon/Postgres Only -- NO FallBack! Always uses real DB!
 import { neon } from '@neondatabase/serverless';
 
-// Global fallback storage
-if (!global.storage) {
-  global.storage = {
-    'Eğitim Takip': [],
-    'Çekim Takip': [],
-    'Montaj Takip': []
-  };
-}
-
-// Tablo ismi eşlemeleri
+// Tablo (sheet) ismi eşlemeleri
 const tableMap = {
   'Eğitim Takip': 'egitim_takip',
   'Çekim Takip': 'cekim_takip',
   'Montaj Takip': 'montaj_takip'
 };
 
-// Frontend→DB alan eşlemeleri: camelCase → snake_case
+// Frontend→DB field eşleşmeleri
 const fieldMapper = {
+  // ... SENDEKİ fieldMapper buraya koy (değiştirme gereksiz)
   'icerikTakip': 'icerik_takip',
   'icerikBaslama': 'icerik_baslama',
   'cekimBaslama': 'cekim_baslama',
@@ -47,19 +39,17 @@ const fieldMapper = {
   'montajTamamlandi': 'montaj_tamamlandi',
 };
 
-// Frontend field ismini DB ismine çevirme
 function mapFieldsToDB(data) {
   const mapped = {};
   for (const [key, value] of Object.entries(data)) {
     if (value !== undefined && value !== null && value !== '') {
-      const dbKey = fieldMapper[key] || key;
+      const dbKey = fieldMapper[key] || key; // otomatik map et
       mapped[dbKey] = value;
     }
   }
   return mapped;
 }
 
-// API body parser sınırı büyüt
 export const config = {
   api: {
     bodyParser: {
@@ -69,7 +59,7 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  // CORS header
+  // CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
@@ -80,213 +70,85 @@ export default async function handler(req, res) {
     return;
   }
 
+  // SADECE VERİTABANI VAR. ENV DE YOKSA DİREKT HATA DÖNER!
+  if (!process.env.DATABASE_URL || process.env.DATABASE_URL.length === 0) {
+    res.status(500).json({ success: false, error: "DATABASE_URL environment variable is missing!" });
+    return;
+  }
+
+  const sheetName = req.query.sheet || req.body?.sheetName;
+  const tableName = tableMap[sheetName];
+  if (!tableName) {
+    res.status(400).json({ success: false, error: 'Invalid sheet name: ' + sheetName });
+    return;
+  }
+  const sql = neon(process.env.DATABASE_URL);
+
   try {
-    const sheetName = req.query.sheet || req.body?.sheetName;
-    const tableName = tableMap[sheetName];
-
-    if (!tableName) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid sheet name: ' + sheetName
-      });
-      return;
-    }
-
-    // DB env kontrolü
-    const hasDatabase = process.env.DATABASE_URL && process.env.DATABASE_URL.length > 0;
-    if (!hasDatabase) {
-      console.warn('⚠️ DATABASE_URL not set');
-      handleFallback(req, res, sheetName);
-      return;
-    }
-
-    const sql = neon(process.env.DATABASE_URL);
-
     // --- GET ---
     if (req.method === 'GET') {
-      try {
-        const result = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
-        res.status(200).json({
-          data: result,
-          success: true,
-          source: 'neon'
-        });
-        return;
-      } catch (dbError) {
-        console.error('Database error:', dbError);
-        handleFallback(req, res, sheetName);
-        return;
-      }
+      const result = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+      res.status(200).json({ data: result, success: true });
+      return;
     }
 
     // --- POST ---
     if (req.method === 'POST') {
-      try {
-        const { rowData } = req.body;
-        if (!rowData) {
-          res.status(400).json({ error: 'rowData is required' });
-          return;
-        }
-        const mappedData = mapFieldsToDB(rowData);
-        const keys = Object.keys(mappedData);
-        const vals = Object.values(mappedData);
-        const columns = keys.join(', ');
-        const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
-        const insertQuery = 'INSERT INTO ' + tableName + ' (' + columns + ') VALUES (' + placeholders + ') RETURNING *';
-        const insertResult = await sql(insertQuery, vals);
-
-        const allData = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
-        res.status(200).json({
-          success: true,
-          data: allData,
-          newRow: insertResult[0],
-          source: 'neon',
-          message: '✅ Veri kaydedildi!'
-        });
-        return;
-      } catch (dbError) {
-        console.error('Insert error:', dbError);
-        res.status(500).json({
-          success: false,
-          error: dbError.message
-        });
+      const { rowData } = req.body;
+      if (!rowData) {
+        res.status(400).json({ error: 'rowData is required' });
         return;
       }
+      const mappedData = mapFieldsToDB(rowData);
+      const keys = Object.keys(mappedData);
+      const vals = Object.values(mappedData);
+      const columns = keys.join(', ');
+      const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+      const insertQuery = 'INSERT INTO ' + tableName + ' (' + columns + ') VALUES (' + placeholders + ') RETURNING *';
+      const insertResult = await sql(insertQuery, vals);
+      res.status(200).json({ success: true, newRow: insertResult[0], message: '✅ Veri kaydedildi!' });
+      return;
     }
 
     // --- PUT ---
     if (req.method === 'PUT') {
-      try {
-        const { rowIndex, rowData } = req.body;
-        const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
-        if (!allRecords[rowIndex]) {
-          res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
-          return;
-        }
-        const recordId = allRecords[rowIndex].id;
-        const mappedData = mapFieldsToDB(rowData);
-        const updateParts = Object.entries(mappedData).map(([key, value], i) => `${key} = $${i + 1}`);
-        const values = Object.values(mappedData);
-        const updateQuery = 'UPDATE ' + tableName
-          + ' SET ' + updateParts.join(', ')
-          + ' WHERE id = $' + (values.length + 1)
-          + ' RETURNING *';
-        const result = await sql(updateQuery, [...values, recordId]);
-        res.status(200).json({
-          success: true,
-          data: result[0],
-          source: 'neon',
-          message: '✅ Güncellendi!'
-        });
-        return;
-      } catch (dbError) {
-        console.error('Update error:', dbError);
-        res.status(500).json({
-          success: false,
-          error: dbError.message
-        });
+      const { rowIndex, rowData } = req.body;
+      const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+      if (!allRecords[rowIndex]) {
+        res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
         return;
       }
+      const recordId = allRecords[rowIndex].id;
+      const mappedData = mapFieldsToDB(rowData);
+      const updateParts = Object.entries(mappedData).map(([key, value], i) => `${key} = $${i + 1}`);
+      const values = Object.values(mappedData);
+      const updateQuery = 'UPDATE ' + tableName
+        + ' SET ' + updateParts.join(', ')
+        + ' WHERE id = $' + (values.length + 1)
+        + ' RETURNING *';
+
+      const result = await sql(updateQuery, [...values, recordId]);
+      res.status(200).json({ success: true, data: result[0], message: '✅ Güncellendi!' });
+      return;
     }
 
     // --- DELETE ---
     if (req.method === 'DELETE') {
-      try {
-        const { rowIndex } = req.body;
-        const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
-        if (!allRecords[rowIndex]) {
-          res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
-          return;
-        }
-        const recordId = allRecords[rowIndex].id;
-        await sql`DELETE FROM ${sql(tableName)} WHERE id = ${recordId}`;
-        const remainingData = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
-        res.status(200).json({
-          success: true,
-          data: remainingData,
-          source: 'neon',
-          message: '✅ Silindi!'
-        });
-        return;
-      } catch (dbError) {
-        console.error('Delete error:', dbError);
-        res.status(500).json({
-          success: false,
-          error: dbError.message
-        });
+      const { rowIndex } = req.body;
+      const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+      if (!allRecords[rowIndex]) {
+        res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
         return;
       }
+      const recordId = allRecords[rowIndex].id;
+      await sql`DELETE FROM ${sql(tableName)} WHERE id = ${recordId}`;
+      res.status(200).json({ success: true, message: '✅ Silindi!' });
+      return;
     }
 
-    // --- METHOD NOT ALLOWED ---
     res.status(405).json({ error: 'Method not allowed: ' + req.method });
-  } catch (error) {
-    console.error('API Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Server error'
-    });
+  } catch (err) {
+    console.error('API Error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Server error' });
   }
-}
-
-// Fallback handler (Belleğe yazan local mod - veritabanı olmadığında)
-function handleFallback(req, res, sheetName) {
-  const method = req.method;
-
-  if (method === 'GET') {
-    const data = global.storage[sheetName] || [];
-    res.status(200).json({
-      data,
-      success: true,
-      source: 'fallback'
-    });
-    return;
-  }
-
-  if (method === 'POST') {
-    const { rowData } = req.body;
-    if (!global.storage[sheetName]) global.storage[sheetName] = [];
-    const newRow = { ...rowData, id: Date.now() };
-    global.storage[sheetName].push(newRow);
-    res.status(200).json({
-      success: true,
-      data: global.storage[sheetName],
-      newRow,
-      source: 'fallback',
-      message: '⚠️ Geçici bellekte kaydedildi'
-    });
-    return;
-  }
-
-  if (method === 'PUT') {
-    const { rowIndex, rowData } = req.body;
-    if (global.storage[sheetName]?.[rowIndex]) {
-      const id = global.storage[sheetName][rowIndex].id;
-      global.storage[sheetName][rowIndex] = { ...rowData, id };
-      res.status(200).json({
-        success: true,
-        source: 'fallback'
-      });
-      return;
-    }
-    res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
-    return;
-  }
-
-  if (method === 'DELETE') {
-    const { rowIndex } = req.body;
-    if (global.storage[sheetName]) {
-      global.storage[sheetName].splice(rowIndex, 1);
-      res.status(200).json({
-        success: true,
-        data: global.storage[sheetName],
-        source: 'fallback'
-      });
-      return;
-    }
-    res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
-    return;
-  }
-
-  res.status(405).json({ error: 'Method not allowed' });
 }
