@@ -1,16 +1,13 @@
 // API Route - Neon/Postgres Only
 import { neon } from '@neondatabase/serverless';
 
-// Tablo (sheet) ismi eşlemeleri
 const tableMap = {
   'Eğitim Takip': 'egitim_takip',
   'Çekim Takip': 'cekim_takip',
   'Montaj Takip': 'montaj_takip'
 };
 
-// Frontend→DB field eşleşmeleri (TÜM ALANLAR)
 const fieldMapper = {
-  // Eğitim Takip alanları
   'dal': 'dal',
   'alan': 'alan',
   'bolum': 'bolum',
@@ -24,8 +21,6 @@ const fieldMapper = {
   'montajSorumlusu': 'montaj_sorumlusu',
   'yayinTarihi': 'yayin_tarihi',
   'notlar': 'notlar',
-
-  // Çekim Takip alanları
   'egitimAdi': 'egitim_adi',
   'egitmenAdi': 'egitmen_adi',
   'cekimSorumlusu': 'cekim_sorumlusu',
@@ -45,8 +40,6 @@ const fieldMapper = {
   'synologyKlasor': 'synology_klasor',
   'videKodu': 'vide_kodu',
   'cekimYapanlar': 'cekim_yapanlar',
-
-  // Montaj Takip alanları
   'icerikUzmani': 'icerik_uzmani',
   'revizeTarihi': 'revize_tarihi',
   'montajDurumu': 'montaj_durumu',
@@ -73,7 +66,6 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
@@ -108,7 +100,9 @@ export default async function handler(req, res) {
   try {
     // --- GET ---
     if (req.method === 'GET') {
-      const result = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+      // FIX: Use string concatenation instead of template literal with sql()
+      const selectQuery = 'SELECT * FROM ' + tableName + ' ORDER BY id DESC';
+      const result = await sql(selectQuery);
       res.status(200).json({ data: result, success: true });
       return;
     }
@@ -132,7 +126,7 @@ export default async function handler(req, res) {
       const columns = keys.join(', ');
       const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
 
-      const insertQuery = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders}) RETURNING *`;
+      const insertQuery = 'INSERT INTO ' + tableName + ' (' + columns + ') VALUES (' + placeholders + ') RETURNING *';
       const insertResult = await sql(insertQuery, vals);
 
       res.status(200).json({ 
@@ -147,7 +141,8 @@ export default async function handler(req, res) {
     if (req.method === 'PUT') {
       const { rowIndex, rowData } = req.body;
 
-      const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+      const selectQuery = 'SELECT * FROM ' + tableName + ' ORDER BY id DESC';
+      const allRecords = await sql(selectQuery);
 
       if (!allRecords[rowIndex]) {
         res.status(404).json({ 
@@ -166,7 +161,7 @@ export default async function handler(req, res) {
       );
       const values = Object.values(mappedData);
 
-      const updateQuery = `UPDATE ${tableName} SET ${updateParts.join(', ')} WHERE id = $${values.length + 1} RETURNING *`;
+      const updateQuery = 'UPDATE ' + tableName + ' SET ' + updateParts.join(', ') + ' WHERE id = $' + (values.length + 1) + ' RETURNING *';
       const result = await sql(updateQuery, [...values, recordId]);
 
       res.status(200).json({ 
@@ -181,7 +176,8 @@ export default async function handler(req, res) {
     if (req.method === 'DELETE') {
       const { rowIndex } = req.body;
 
-      const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+      const selectQuery = 'SELECT * FROM ' + tableName + ' ORDER BY id DESC';
+      const allRecords = await sql(selectQuery);
 
       if (!allRecords[rowIndex]) {
         res.status(404).json({ 
@@ -192,7 +188,8 @@ export default async function handler(req, res) {
       }
 
       const recordId = allRecords[rowIndex].id;
-      await sql`DELETE FROM ${sql(tableName)} WHERE id = ${recordId}`;
+      const deleteQuery = 'DELETE FROM ' + tableName + ' WHERE id = $1';
+      await sql(deleteQuery, [recordId]);
 
       res.status(200).json({ 
         success: true, 
