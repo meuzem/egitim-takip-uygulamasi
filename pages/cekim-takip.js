@@ -44,8 +44,8 @@ export default function CekimTakip() {
       } else {
         await addRowToSheet('Çekim Takip', formData)
       }
+      await loadData()
       setShowModal(false)
-      loadData()
       alert('Başarıyla kaydedildi!')
     } catch (error) {
       alert('Hata: ' + error.message)
