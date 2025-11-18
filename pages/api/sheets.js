@@ -1,4 +1,4 @@
-// API Route - Neon/Postgres Only -- NO FallBack! Always uses real DB!
+// API Route - Neon/Postgres Only
 import { neon } from '@neondatabase/serverless';
 
 // Tablo (sheet) ismi eşlemeleri
@@ -8,31 +8,45 @@ const tableMap = {
   'Montaj Takip': 'montaj_takip'
 };
 
-// Frontend→DB field eşleşmeleri
+// Frontend→DB field eşleşmeleri (TÜM ALANLAR)
 const fieldMapper = {
-  // ... SENDEKİ fieldMapper buraya koy (değiştirme gereksiz)
+  // Eğitim Takip alanları
+  'dal': 'dal',
+  'alan': 'alan',
+  'bolum': 'bolum',
+  'egitim': 'egitim',
+  'egitmen': 'egitmen',
   'icerikTakip': 'icerik_takip',
+  'durum': 'durum',
   'icerikBaslama': 'icerik_baslama',
   'cekimBaslama': 'cekim_baslama',
   'montajBaslama': 'montaj_baslama',
   'montajSorumlusu': 'montaj_sorumlusu',
   'yayinTarihi': 'yayin_tarihi',
-  'egitmen': 'egitmen',
+  'notlar': 'notlar',
+
+  // Çekim Takip alanları
+  'egitimAdi': 'egitim_adi',
   'egitmenAdi': 'egitmen_adi',
   'cekimSorumlusu': 'cekim_sorumlusu',
   'videoAdi': 'video_adi',
   'cekimTarihi': 'cekim_tarihi',
   'onCekim': 'on_cekim',
+  'izlence': 'izlence',
+  'isik': 'isik',
   'fotografCekimi': 'fotograf_cekimi',
   'fotografTarih': 'fotograf_tarih',
   'cekimKontrol': 'cekim_kontrol',
   'kontrolTarih': 'kontrol_tarih',
+  'tasnif': 'tasnif',
   'dipSes': 'dip_ses',
   'cekimTamamlandi': 'cekim_tamamlandi',
+  'synology': 'synology',
   'synologyKlasor': 'synology_klasor',
   'videKodu': 'vide_kodu',
   'cekimYapanlar': 'cekim_yapanlar',
-  'egitimAdi': 'egitim_adi',
+
+  // Montaj Takip alanları
   'icerikUzmani': 'icerik_uzmani',
   'revizeTarihi': 'revize_tarihi',
   'montajDurumu': 'montaj_durumu',
@@ -43,7 +57,7 @@ function mapFieldsToDB(data) {
   const mapped = {};
   for (const [key, value] of Object.entries(data)) {
     if (value !== undefined && value !== null && value !== '') {
-      const dbKey = fieldMapper[key] || key; // otomatik map et
+      const dbKey = fieldMapper[key] || key;
       mapped[dbKey] = value;
     }
   }
@@ -70,18 +84,25 @@ export default async function handler(req, res) {
     return;
   }
 
-  // SADECE VERİTABANI VAR. ENV DE YOKSA DİREKT HATA DÖNER!
   if (!process.env.DATABASE_URL || process.env.DATABASE_URL.length === 0) {
-    res.status(500).json({ success: false, error: "DATABASE_URL environment variable is missing!" });
+    res.status(500).json({ 
+      success: false, 
+      error: "DATABASE_URL environment variable is missing!" 
+    });
     return;
   }
 
   const sheetName = req.query.sheet || req.body?.sheetName;
   const tableName = tableMap[sheetName];
+
   if (!tableName) {
-    res.status(400).json({ success: false, error: 'Invalid sheet name: ' + sheetName });
+    res.status(400).json({ 
+      success: false, 
+      error: 'Invalid sheet name: ' + sheetName 
+    });
     return;
   }
+
   const sql = neon(process.env.DATABASE_URL);
 
   try {
@@ -95,60 +116,99 @@ export default async function handler(req, res) {
     // --- POST ---
     if (req.method === 'POST') {
       const { rowData } = req.body;
+
       if (!rowData) {
-        res.status(400).json({ error: 'rowData is required' });
+        res.status(400).json({ success: false, error: 'rowData is required' });
         return;
       }
+
       const mappedData = mapFieldsToDB(rowData);
+      mappedData.created_at = new Date().toISOString();
+      mappedData.updated_at = new Date().toISOString();
+
       const keys = Object.keys(mappedData);
       const vals = Object.values(mappedData);
+
       const columns = keys.join(', ');
       const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
-      const insertQuery = 'INSERT INTO ' + tableName + ' (' + columns + ') VALUES (' + placeholders + ') RETURNING *';
+
+      const insertQuery = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders}) RETURNING *`;
       const insertResult = await sql(insertQuery, vals);
-      res.status(200).json({ success: true, newRow: insertResult[0], message: '✅ Veri kaydedildi!' });
+
+      res.status(200).json({ 
+        success: true, 
+        newRow: insertResult[0], 
+        message: '✅ Veri kaydedildi!' 
+      });
       return;
     }
 
     // --- PUT ---
     if (req.method === 'PUT') {
       const { rowIndex, rowData } = req.body;
+
       const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+
       if (!allRecords[rowIndex]) {
-        res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+        res.status(404).json({ 
+          success: false, 
+          error: 'Kayıt bulunamadı' 
+        });
         return;
       }
+
       const recordId = allRecords[rowIndex].id;
       const mappedData = mapFieldsToDB(rowData);
-      const updateParts = Object.entries(mappedData).map(([key, value], i) => `${key} = $${i + 1}`);
-      const values = Object.values(mappedData);
-      const updateQuery = 'UPDATE ' + tableName
-        + ' SET ' + updateParts.join(', ')
-        + ' WHERE id = $' + (values.length + 1)
-        + ' RETURNING *';
+      mappedData.updated_at = new Date().toISOString();
 
+      const updateParts = Object.entries(mappedData).map(([key, value], i) => 
+        `${key} = $${i + 1}`
+      );
+      const values = Object.values(mappedData);
+
+      const updateQuery = `UPDATE ${tableName} SET ${updateParts.join(', ')} WHERE id = $${values.length + 1} RETURNING *`;
       const result = await sql(updateQuery, [...values, recordId]);
-      res.status(200).json({ success: true, data: result[0], message: '✅ Güncellendi!' });
+
+      res.status(200).json({ 
+        success: true, 
+        data: result[0], 
+        message: '✅ Güncellendi!' 
+      });
       return;
     }
 
     // --- DELETE ---
     if (req.method === 'DELETE') {
       const { rowIndex } = req.body;
+
       const allRecords = await sql`SELECT * FROM ${sql(tableName)} ORDER BY id DESC`;
+
       if (!allRecords[rowIndex]) {
-        res.status(404).json({ success: false, error: 'Kayıt bulunamadı' });
+        res.status(404).json({ 
+          success: false, 
+          error: 'Kayıt bulunamadı' 
+        });
         return;
       }
+
       const recordId = allRecords[rowIndex].id;
       await sql`DELETE FROM ${sql(tableName)} WHERE id = ${recordId}`;
-      res.status(200).json({ success: true, message: '✅ Silindi!' });
+
+      res.status(200).json({ 
+        success: true, 
+        message: '✅ Silindi!' 
+      });
       return;
     }
 
     res.status(405).json({ error: 'Method not allowed: ' + req.method });
+
   } catch (err) {
     console.error('API Error:', err);
-    res.status(500).json({ success: false, error: err.message || 'Server error' });
+    res.status(500).json({ 
+      success: false, 
+      error: err.message || 'Server error',
+      details: err.toString()
+    });
   }
 }
