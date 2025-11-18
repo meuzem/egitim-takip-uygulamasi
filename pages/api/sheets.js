@@ -1,4 +1,4 @@
-// API Route - Neon PostgreSQL (Vercel Compatible)
+// API Route - Neon PostgreSQL (Vercel Compatible with Field Mapper)
 import { neon } from '@neondatabase/serverless';
 
 // Global fallback storage
@@ -16,6 +16,27 @@ const tableMap = {
   'Çekim Takip': 'cekim_takip',
   'Montaj Takip': 'montaj_takip'
 };
+
+// Field name mapping: camelCase → snake_case
+const fieldMapper = {
+  'iceriktakip': 'icerik_takip',
+  'icerikTakip': 'icerik_takip',
+  'icerikBaslama': 'icerik_baslama',
+  'cekimBaslama': 'cekim_baslama',
+  'montajBaslama': 'montaj_baslama',
+  'montajSorumlus u': 'montaj_sorumlus u',
+  'yayinTarihi': 'yayin_tarihi'
+};
+
+// Convert frontend field names to database field names
+function mapFieldsToDB(data) {
+  const mapped = {};
+  for (const [key, value] of Object.entries(data)) {
+    const dbKey = fieldMapper[key] || key;
+    mapped[dbKey] = value;
+  }
+  return mapped;
+}
 
 // Disable body parser size limit
 export const config = {
@@ -89,8 +110,11 @@ export default async function handler(req, res) {
           return;
         }
 
-        const columns = Object.keys(rowData);
-        const values = Object.values(rowData);
+        // Map frontend fields to database fields
+        const mappedData = mapFieldsToDB(rowData);
+
+        const columns = Object.keys(mappedData);
+        const values = Object.values(mappedData);
         const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
         const insertQuery = `
@@ -133,8 +157,12 @@ export default async function handler(req, res) {
         }
 
         const recordId = allRecords[rowIndex].id;
-        const updateParts = Object.entries(rowData).map(([key, value], i) => `${key} = $${i + 1}`);
-        const values = Object.values(rowData);
+        
+        // Map frontend fields to database fields
+        const mappedData = mapFieldsToDB(rowData);
+        
+        const updateParts = Object.entries(mappedData).map(([key, value], i) => `${key} = $${i + 1}`);
+        const values = Object.values(mappedData);
 
         const updateQuery = `
           UPDATE ${tableName}
