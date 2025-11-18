@@ -43,8 +43,8 @@ export default function MontajTakip() {
       } else {
         await addRowToSheet('Montaj Takip', formData)
       }
+      await loadData()
       setShowModal(false)
-      loadData()
       alert('Başarıyla kaydedildi!')
     } catch (error) {
       alert('Hata: ' + error.message)
