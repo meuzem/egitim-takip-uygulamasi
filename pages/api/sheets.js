@@ -2,8 +2,8 @@
 import { neon } from '@neondatabase/serverless';
 
 const tableMap = {
-  'Eğitim Takip': 'egitim_takip',
-  'Çekim Takip': 'cekim_takip',
+  'EÄŸitim Takip': 'egitim_takip',
+  'Ã‡ekim Takip': 'cekim_takip',
   'Montaj Takip': 'montaj_takip'
 };
 
@@ -67,7 +67,7 @@ function mapFieldsToDB(data) {
   return mapped;
 }
 
-// Reverse mapper: snake_case → camelCase
+// Reverse mapper: snake_case â†’ camelCase
 function mapDBToFields(dbRow) {
   const reverseMap = {};
   for (const [camelKey, snakeKey] of Object.entries(fieldMapper)) {
@@ -156,7 +156,7 @@ export default async function handler(req, res) {
       res.status(200).json({ 
         success: true, 
         newRow: insertResult[0], 
-        message: '✅ Veri kaydedildi!' 
+        message: 'âœ… Veri kaydedildi!' 
       });
       return;
     }
@@ -171,7 +171,7 @@ export default async function handler(req, res) {
       if (!allRecords[rowIndex]) {
         res.status(404).json({ 
           success: false, 
-          error: 'Kayıt bulunamadı' 
+          error: 'KayÄ±t bulunamadÄ±' 
         });
         return;
       }
@@ -191,11 +191,77 @@ export default async function handler(req, res) {
       res.status(200).json({ 
         success: true, 
         data: result[0], 
-        message: '✅ Güncellendi!' 
+        message: 'âœ… GÃ¼ncellendi!' 
       });
       return;
     }
 
+// 👇👇 Sadece aşağıdan yukarıya kadar yapıştır!
+function toSnakeCase(obj) {
+  if (!obj) return {};
+  const map = {
+    egitimAdi: "egitim_adi", egitmenAdi: "egitmen_adi",
+    cekimSorumlusu: "cekim_sorumlusu", cekimDurumu: "cekim_durumu",
+    videoAdi:"video_adi", notlar: "notlar",
+    // Diğer camelCase->snake_case alanlarını ekle!
+  };
+  return Object.keys(obj).reduce((acc, key) =>
+    ({ ...acc, [map[key] || key]: obj[key] }), {});
+}
+
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  if (req.method === "OPTIONS") { res.status(200).end(); return; }
+
+  const sheetName = req.query.sheet || req.body?.sheetName;
+  const tableMap = { 'Eğitim Takip':'egitim_takip', 'Çekim Takip':'cekim_takip', 'Montaj Takip':'montaj_takip' };
+  const tableName = tableMap[sheetName];
+
+  const sql = neon(process.env.DATABASE_URL);
+  
+  try {
+    if (req.method === "GET") {
+      const rows = await sql(`SELECT * FROM ${tableName} ORDER BY id DESC`);
+      res.status(200).json({ data: rows, success:true }); return;
+    }
+    if (req.method === "POST") {
+      // 👇 MAPPING İLE SNAKE CASE COLLUMNA ÇEVİR!
+      let mappedData = toSnakeCase(req.body.rowData || req.body);
+      // Kolon isimlerini ve değerlerini ayıkla:
+      const cols = Object.keys(mappedData);
+      const vals = Object.values(mappedData);
+      const q = `INSERT INTO ${tableName} (${cols.join(",")}) VALUES (${vals.map((_,i)=>"$"+(i+1)).join(",")}) RETURNING *`;
+      const inserted = await sql(q, vals);
+      res.status(200).json({ newRow:inserted[0], success:true }); return;
+    }
+    if (req.method === "PUT") {
+      const { rowIndex, rowData } = req.body;
+      let mappedData = toSnakeCase(rowData);
+      const cols = Object.keys(mappedData);
+      const sets = cols.map((c,i)=>`${c}=$${i+1}`).join(",");
+      // Güncellenecek satırı bulmak için önce id alın.
+      const rows = await sql(`SELECT id FROM ${tableName} ORDER BY id DESC`);
+      const id = rows[rowIndex].id;
+      const q = `UPDATE ${tableName} SET ${sets} WHERE id=$${cols.length+1} RETURNING *`;
+      const updated = await sql(q, [...Object.values(mappedData), id]);
+      res.status(200).json({ updated:updated[0], success:true }); return;
+    }
+    if (req.method === "DELETE") {
+      const { rowIndex } = req.body;
+      const rows = await sql(`SELECT id FROM ${tableName} ORDER BY id DESC`);
+      const recId = rows[rowIndex].id;
+      await sql(`DELETE FROM ${tableName} WHERE id=$1`, [recId]);
+      res.status(200).json({ success:true }); return;
+    }
+    res.status(405).json({error:"Method not allowed"});
+  } catch(e) {
+    res.status(500).json({ success:false, error:String(e), details:String(e) });
+  }
+}
+
+
+    
     // --- DELETE ---
     if (req.method === 'DELETE') {
       const { rowIndex } = req.body;
@@ -206,7 +272,7 @@ export default async function handler(req, res) {
       if (!allRecords[rowIndex]) {
         res.status(404).json({ 
           success: false, 
-          error: 'Kayıt bulunamadı' 
+          error: 'KayÄ±t bulunamadÄ±' 
         });
         return;
       }
@@ -217,7 +283,7 @@ export default async function handler(req, res) {
 
       res.status(200).json({ 
         success: true, 
-        message: '�\� Silindi!' 
+        message: 'â\… Silindi!' 
       });
       return;
     }
