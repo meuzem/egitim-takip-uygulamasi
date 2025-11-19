@@ -57,6 +57,23 @@ function mapFieldsToDB(data) {
   return mapped;
 }
 
+
+// Reverse mapper: snake_case → camelCase
+function mapDBToFields(dbRow) {
+  const reverseMap = {};
+  // Reverse the fieldMapper
+  for (const [camelKey, snakeKey] of Object.entries(fieldMapper)) {
+    reverseMap[snakeKey] = camelKey;
+  }
+
+  const mapped = {};
+  for (const [key, value] of Object.entries(dbRow)) {
+    const camelKey = reverseMap[key] || key;
+    mapped[camelKey] = value;
+  }
+  return mapped;
+}
+
 export const config = {
   api: {
     bodyParser: {
@@ -103,7 +120,7 @@ export default async function handler(req, res) {
       // FIX: Use string concatenation instead of template literal with sql()
       const selectQuery = 'SELECT * FROM ' + tableName + ' ORDER BY id DESC';
       const result = await sql(selectQuery);
-      res.status(200).json({ data: result, success: true });
+      res.status(200).json({ data: result.map(mapDBToFields), success: true });
       return;
     }
 
