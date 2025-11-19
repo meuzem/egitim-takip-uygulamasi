@@ -25,25 +25,35 @@ const fieldMapper = {
   'egitmenAdi': 'egitmen_adi',
   'cekimSorumlusu': 'cekim_sorumlusu',
   'videoAdi': 'video_adi',
-  'cekimTarihi': 'cekim_tarihi',
+  'bitenVideoAdi': 'biten_video_adi',
+  'cekimBaslamaTarihi': 'cekim_baslama_tarihi',
   'onCekim': 'on_cekim',
+  'onCekimTarihi': 'on_cekim_tarihi',
   'izlence': 'izlence',
-  'isik': 'isik',
-  'fotografCekimi': 'fotograf_cekimi',
-  'fotografTarih': 'fotograf_tarih',
-  'cekimKontrol': 'cekim_kontrol',
-  'kontrolTarih': 'kontrol_tarih',
+  'isikSorumlu': 'isik_sorumlu',
+  'cekimDurumu': 'cekim_durumu',
+  'cekimBitisTarihi': 'cekim_bitis_tarihi',
+  'fotografCekimleri': 'fotograf_cekimleri',
+  'fotografCekimYapan': 'fotograf_cekim_yapan',
+  'fotografCekimTarihi': 'fotograf_cekim_tarihi',
+  'cekimKontrolleri': 'cekim_kontrolleri',
+  'cekimKontrolTarihi': 'cekim_kontrol_tarihi',
+  'cekimKontrolYapan': 'cekim_kontrol_yapan',
   'tasnif': 'tasnif',
-  'dipSes': 'dip_ses',
-  'cekimTamamlandi': 'cekim_tamamlandi',
+  'tasnifYapan': 'tasnif_yapan',
+  'dipSesTem': 'dip_ses_tem',
+  'cekim': 'cekim',
   'synology': 'synology',
   'synologyKlasor': 'synology_klasor',
-  'videKodu': 'vide_kodu',
+  'videoKodu': 'video_kodu',
   'cekimYapanlar': 'cekim_yapanlar',
   'icerikUzmani': 'icerik_uzmani',
-  'revizeTarihi': 'revize_tarihi',
+  'montajBaslamaTarihi': 'montaj_baslama_tarihi',
+  'revize1Tarihi': 'revize1_tarihi',
+  'revize2Tarihi': 'revize2_tarihi',
   'montajDurumu': 'montaj_durumu',
-  'montajTamamlandi': 'montaj_tamamlandi',
+  'montajBitisTarihi': 'montaj_bitis_tarihi',
+  'montaj': 'montaj',
 };
 
 function mapFieldsToDB(data) {
@@ -57,11 +67,9 @@ function mapFieldsToDB(data) {
   return mapped;
 }
 
-
 // Reverse mapper: snake_case â†’ camelCase
 function mapDBToFields(dbRow) {
   const reverseMap = {};
-  // Reverse the fieldMapper
   for (const [camelKey, snakeKey] of Object.entries(fieldMapper)) {
     reverseMap[snakeKey] = camelKey;
   }
@@ -117,7 +125,6 @@ export default async function handler(req, res) {
   try {
     // --- GET ---
     if (req.method === 'GET') {
-      // FIX: Use string concatenation instead of template literal with sql()
       const selectQuery = 'SELECT * FROM ' + tableName + ' ORDER BY id DESC';
       const result = await sql(selectQuery);
       res.status(200).json({ data: result.map(mapDBToFields), success: true });
@@ -210,7 +217,7 @@ export default async function handler(req, res) {
 
       res.status(200).json({ 
         success: true, 
-        message: 'âœ… Silindi!' 
+        message: 'â\… Silindi!' 
       });
       return;
     }
