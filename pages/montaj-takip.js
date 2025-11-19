@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getSheetsData, addRowToSheet, updateRow, deleteRow } from '../lib/sheets'
+import { getSheet sData, addRowToSheet, updateRow, deleteRow } from '../lib/sheets'
+import { exportToExcel } from '../lib/utils'
 
 export default function MontajTakip() {
   const [data, setData] = useState([])
@@ -10,7 +11,8 @@ export default function MontajTakip() {
 
   const montajSorumlusuOptions = ['Ayşe Nur Yazıcı', 'Hasan Taşdemir', 'Hatice Yürük', 'Cihan Çimen']
   const icerikUzmaniOptions = ['Arzu Mantar', 'Meltem Ermez', 'Nezahat Kara', 'Sevim Aydın Verim']
-  const isikOptions = ['Gülnur Kılıç', 'Sadi Demirci', 'Soner Ulu']
+  const montajDurumuOptions = ['Başladı', 'Devam Ediyor', '1.Revize', '2.Revize', 'Bitti']
+  const montajOptions = ['Tamamlandı', 'Tamamlanmadı']
 
   useEffect(() => {
     loadData()
@@ -18,7 +20,13 @@ export default function MontajTakip() {
 
   const loadData = async () => {
     const result = await getSheetsData('Montaj Takip')
-    setData(result.data || [])
+    // Sıralama: "Bitti" olanlar sona
+    const sorted = (result.data || []).sort((a, b) => {
+      if (a.montajDurumu === 'Bitti' && b.montajDurumu !== 'Bitti') return 1
+      if (a.montajDurumu !== 'Bitti' && b.montajDurumu === 'Bitti') return -1
+      return 0
+    })
+    setData(sorted)
   }
 
   const openModal = (index = null) => {
@@ -28,8 +36,9 @@ export default function MontajTakip() {
     } else {
       setEditingIndex(null)
       setFormData({
-        egitimAdi: '', egitmenAdi: '', montajSorumlusu: '', videoAdi: '', icerikUzmani: '',
-        montajBaslama: '', revizeTarihi: '', isik: '', montajDurumu: '', montajTamamlandi: '', notlar: ''
+        egitimAdi: '', egitmenAdi: '', montajSorumlusu: '', bitenVideoAdi: '', icerikUzmani: '',
+        montajBaslamaTarihi: '', revize1Tarihi: '', revize2Tarihi: '', montajDurumu: '',
+        montajBitisTarihi: '', montaj: '', notlar: ''
       })
     }
     setShowModal(true)
@@ -52,7 +61,7 @@ export default function MontajTakip() {
   }
 
   const handleDelete = async (index) => {
-    if (confirm('Silmek istediğinizden emin misiniz?')) {
+    if (confirm('Silmek istediğinize emin misiniz?')) {
       try {
         await deleteRow('Montaj Takip', index)
         loadData()
@@ -61,6 +70,10 @@ export default function MontajTakip() {
         alert('Hata: ' + error.message)
       }
     }
+  }
+
+  const handleExport = () => {
+    exportToExcel(data, 'Montaj_Takip_' + new Date().toISOString().split('T')[0])
   }
 
   return (
@@ -79,10 +92,15 @@ export default function MontajTakip() {
 
       <main className="container mx-auto px-6 py-8">
         <div className="bg-white rounded-lg shadow p-6 mb-6 flex justify-between items-center">
-          <h2 className="text-xl font-bold">🎞️ Montaj Listesi ({data.length})</h2>
-          <button onClick={() => openModal()} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-            ➕ Yeni Montaj Ekle
-          </button>
+          <h2 className="text-xl font-bold">🎬 Montaj Listesi ({data.length})</h2>
+          <div className="space-x-3">
+            <button onClick={handleExport} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+              📥 Excel İndir
+            </button>
+            <button onClick={() => openModal()} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+              ➕ Yeni Montaj Ekle
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -94,19 +112,20 @@ export default function MontajTakip() {
                   <th>Eğitim Adı</th>
                   <th>Eğitmen</th>
                   <th>Montaj Sorumlusu</th>
-                  <th>Video Adı</th>
+                  <th>Biten Video Adı</th>
                   <th>İçerik Uzmanı</th>
                   <th>Başlama Tarihi</th>
-                  <th>Revize Tarihi</th>
-                  <th>Işık</th>
+                  <th>1.Revize Tarihi</th>
+                  <th>2.Revize Tarihi</th>
                   <th>Durum</th>
-                  <th>Tamamlandı</th>
+                  <th>Bitiş Tarihi</th>
+                  <th>Montaj</th>
                   <th>Notlar</th>
                 </tr>
               </thead>
               <tbody>
                 {data.map((row, index) => (
-                  <tr key={index}>
+                  <tr key={index} className={row.montajDurumu === 'Bitti' ? 'bg-green-50' : ''}>
                     <td className="whitespace-nowrap">
                       <button onClick={() => openModal(index)} className="px-3 py-1 bg-blue-500 text-white rounded mr-2 hover:bg-blue-600">✏️</button>
                       <button onClick={() => handleDelete(index)} className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">🗑️</button>
@@ -114,18 +133,19 @@ export default function MontajTakip() {
                     <td>{row.egitimAdi}</td>
                     <td>{row.egitmenAdi}</td>
                     <td>{row.montajSorumlusu}</td>
-                    <td>{row.videoAdi}</td>
+                    <td>{row.bitenVideoAdi}</td>
                     <td>{row.icerikUzmani}</td>
-                    <td>{row.montajBaslama}</td>
-                    <td>{row.revizeTarihi}</td>
-                    <td>{row.isik}</td>
+                    <td>{row.montajBaslamaTarihi}</td>
+                    <td>{row.revize1Tarihi}</td>
+                    <td>{row.revize2Tarihi}</td>
                     <td><span className="px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800">{row.montajDurumu}</span></td>
-                    <td><span className={`px-3 py-1 rounded-full text-sm ${row.montajTamamlandi === 'Evet' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{row.montajTamamlandi}</span></td>
+                    <td>{row.montajBitisTarihi}</td>
+                    <td><span className={`px-3 py-1 rounded-full text-sm ${row.montaj === 'Tamamlandı' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{row.montaj}</span></td>
                     <td>{row.notlar}</td>
                   </tr>
                 ))}
                 {data.length === 0 && (
-                  <tr><td colSpan="12" className="text-center py-8 text-gray-500">Henüz veri yok. Yeni montaj eklemek için butonu kullanın.</td></tr>
+                  <tr><td colSpan="13" className="text-center py-8 text-gray-500">Henüz veri yok. Yeni montaj eklemek için butonu kullanın.</td></tr>
                 )}
               </tbody>
             </table>
@@ -154,44 +174,47 @@ export default function MontajTakip() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Video Adı</label>
-                <input type="text" value={formData.videoAdi || ''} onChange={(e) => setFormData({...formData, videoAdi: e.target.value})} className="w-full" />
-              </div>
-              <div>
                 <label className="block text-sm font-medium mb-2">İçerik Uzmanı</label>
                 <select value={formData.icerikUzmani || ''} onChange={(e) => setFormData({...formData, icerikUzmani: e.target.value})} className="w-full">
                   <option value="">Seçiniz</option>
                   {icerikUzmaniOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-2">Biten Video Adı</label>
+                <textarea value={formData.bitenVideoAdi || ''} onChange={(e) => setFormData({...formData, bitenVideoAdi: e.target.value})} rows="2" className="w-full"></textarea>
+              </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Montaj Başlama Tarihi</label>
-                <input type="date" value={formData.montajBaslama || ''} onChange={(e) => setFormData({...formData, montajBaslama: e.target.value})} className="w-full" />
+                <input type="date" value={formData.montajBaslamaTarihi || ''} onChange={(e) => setFormData({...formData, montajBaslamaTarihi: e.target.value})} className="w-full" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Revize Tarihi</label>
-                <input type="date" value={formData.revizeTarihi || ''} onChange={(e) => setFormData({...formData, revizeTarihi: e.target.value})} className="w-full" />
+                <label className="block text-sm font-medium mb-2">1.Revize Tarihi</label>
+                <input type="date" value={formData.revize1Tarihi || ''} onChange={(e) => setFormData({...formData, revize1Tarihi: e.target.value})} className="w-full" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Işık Sorumlusu</label>
-                <select value={formData.isik || ''} onChange={(e) => setFormData({...formData, isik: e.target.value})} className="w-full">
-                  <option value="">Seçiniz</option>
-                  {isikOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
+                <label className="block text-sm font-medium mb-2">2.Revize Tarihi</label>
+                <input type="date" value={formData.revize2Tarihi || ''} onChange={(e) => setFormData({...formData, revize2Tarihi: e.target.value})} className="w-full" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Montaj Durumu</label>
-                <input type="text" value={formData.montajDurumu || ''} onChange={(e) => setFormData({...formData, montajDurumu: e.target.value})} className="w-full" placeholder="Örn: Montajda, Revize, Tamamlandı" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Montaj Tamamlandı</label>
-                <select value={formData.montajTamamlandi || ''} onChange={(e) => setFormData({...formData, montajTamamlandi: e.target.value})} className="w-full">
+                <select value={formData.montajDurumu || ''} onChange={(e) => setFormData({...formData, montajDurumu: e.target.value})} className="w-full">
                   <option value="">Seçiniz</option>
-                  <option value="Evet">Evet</option>
-                  <option value="Hayır">Hayır</option>
+                  {montajDurumuOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
-              <div className="md:col-span-2">
+              <div>
+                <label className="block text-sm font-medium mb-2">Montaj Bitiş Tarihi</label>
+                <input type="date" value={formData.montajBitisTarihi || ''} onChange={(e) => setFormData({...formData, montajBitisTarihi: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Montaj </label>
+                <select value={formData.montaj || ''} onChange={(e) => setFormData({...formData, montaj: e.target.value})} className="w-full">
+                  <option value="">Seçiniz</option>
+                  montajOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium mb-2">Notlar</label>
                 <textarea value={formData.notlar || ''} onChange={(e) => setFormData({...formData, notlar: e.target.value})} rows="3" className="w-full"></textarea>
               </div>
