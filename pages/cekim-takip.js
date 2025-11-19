@@ -2,85 +2,65 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getSheetsData, addRowToSheet, updateRow, deleteRow } from "../lib/sheets";
 import { exportToExcel } from "../lib/utils";
-
 const sorumluOpt = ["Gülnur Kılıç", "Sadi Demirci", "Soner Ulu"];
-const icerikUzmaniOpt = ["Arzu Mantar","Meltem Ermez","Nezahat Kara","Sevim Aydın Verim"];
 const cekimDurumuOpt = ["Başladı", "Devam Ediyor", "Tekrar Çekim", "Bitti"];
-// ... diğer açılırlar
 
 export default function CekimTakip() {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
+
   const [formData, setFormData] = useState({
-    egitim_adi:"", egitmen_adi:"", cekim_sorumlusu:"", video_adi:"",
-    cekim_baslama_tarihi:"", on_cekim:"", on_cekim_tarihi:"", izlence:"",
-    isik_sorumlu:"", cekim_durumu:"", cekim_bitis_tarihi:"", fotograf_cekimleri:"",
-    fotograf_cekim_yapan:"", fotograf_cekim_tarihi:"", cekim_kontrolleri:"",
-    cekim_kontrol_tarihi:"", cekim_kontrol_yapan:"", tasnif:"", tasnif_yapan:"",
-    dip_ses_temizligi:"", cekim:"", synology:"", synology_klasor_adi:"",
-    videonun_synologydeki_adi:"", cekim_yapanlar:"", notlar:""
+    egitim_adi:"", egitmen_adi:"", cekim_sorumlusu:"", cekim_durumu:"", notlar:""
+  });
+  const [filters, setFilters] = useState({
+    egitim_adi:"", egitmen_adi:"", cekim_sorumlusu:"", cekim_durumu:""
   });
 
-  const [filters, setFilters] = useState({ egitim_adi:'', egitmen_adi:'', cekim_sorumlusu:'', cekim_durumu:'' });
-
-  useEffect(()=>{ getData(); },[]);
-  useEffect(()=>{
+  useEffect(()=>{ getData(); }, []);
+  useEffect(()=>{ 
     let d = data;
-    if(filters.egitim_adi) d = d.filter(r=>r.egitim_adi === filters.egitim_adi);
-    if(filters.egitmen_adi) d = d.filter(r=>r.egitmen_adi === filters.egitmen_adi);
-    if(filters.cekim_sorumlusu) d = d.filter(r=>r.cekim_sorumlusu === filters.cekim_sorumlusu);
-    if(filters.cekim_durumu) d = d.filter(r=>r.cekim_durumu === filters.cekim_durumu);
-    d = [...d].sort((a, b)=>
-      (a.cekim_durumu==="Bitti"?1:0)-(b.cekim_durumu==="Bitti"?1:0));
+    Object.entries(filters).forEach(([k,v])=>{
+      if(v) d = d.filter(row=>row[k]===v)
+    });
+    d = [...d].sort((a, b)=>(a.cekim_durumu==="Bitti"?1:0)-(b.cekim_durumu==="Bitti"?1:0));
     setFilteredData(d);
-  },[filters, data]);
+  }, [filters, data]);
 
   async function getData() {
     const res = await getSheetsData("Çekim Takip");
     setData(res.data||[]);
   }
-  function openModal(idx=null) {
+  function openModal(idx=null){
     if(idx!==null) {
       setEditingIndex(idx); setFormData(filteredData[idx]);
     } else {
-      setEditingIndex(null);
-      setFormData({
-        egitim_adi:"", egitmen_adi:"", cekim_sorumlusu:"", video_adi:"",
-        cekim_baslama_tarihi:"", on_cekim:"", on_cekim_tarihi:"", izlence:"",
-        isik_sorumlu:"", cekim_durumu:"", cekim_bitis_tarihi:"", fotograf_cekimleri:"",
-        fotograf_cekim_yapan:"", fotograf_cekim_tarihi:"", cekim_kontrolleri:"",
-        cekim_kontrol_tarihi:"", cekim_kontrol_yapan:"", tasnif:"", tasnif_yapan:"",
-        dip_ses_temizligi:"", cekim:"", synology:"", synology_klasor_adi:"",
-        videonun_synologydeki_adi:"", cekim_yapanlar:"", notlar:""
+      setEditingIndex(null); setFormData({
+        egitim_adi:"", egitmen_adi:"", cekim_sorumlusu:"", cekim_durumu:"", notlar:""
       });
     }
     setShowModal(true);
   }
-
   async function handleSubmit(e) {
     e.preventDefault();
     try {
       if(editingIndex!==null) await updateRow("Çekim Takip", editingIndex, formData);
       else await addRowToSheet("Çekim Takip", formData);
       await getData(); setShowModal(false);
-      alert("Başarıyla kaydedildi!");
-    } catch(err) { alert("Kayıt hatası: "+err.message);}
+    } catch(err){ alert(err);}
   }
-  async function handleDelete(idx) {
-    if(!confirm("Silmek istediğinizden emin misiniz?")) return;
+  async function handleDelete(idx){
+    if(!confirm("Silinsin mi?")) return;
     try {
       await deleteRow("Çekim Takip", idx); await getData();
-      alert("Kayıt silindi!");
-    } catch(err){ alert("Silme hatası: "+err.message);}
-  }
-
-  function handleExport() {
-    exportToExcel(filteredData, "Cekim_Takip_"+new Date().toISOString().split("T")[0]);
+    } catch(err){alert(err);}
   }
   function resetFilters() {
-    setFilters({ egitim_adi:'', egitmen_adi:'', cekim_sorumlusu:'', cekim_durumu:'' });
+    setFilters({ egitim_adi:"", egitmen_adi:"", cekim_sorumlusu:"", cekim_durumu:"" });
+  }
+  function handleExport() {
+    exportToExcel(filteredData, "Cekim_Takip_"+new Date().toISOString().split("T")[0]);
   }
 
   return (
@@ -96,32 +76,20 @@ export default function CekimTakip() {
       </nav>
       <main className="container mx-auto px-6 py-6">
         <div className="mb-4 flex flex-wrap gap-4 items-end">
-          <div>
-            <label className="block text-xs mb-1">Eğitim Adı</label>
-            <input type="text" className="w-32 border" value={filters.egitim_adi}
+          <input type="text" className="w-32 border" placeholder="Eğitim Adı" value={filters.egitim_adi}
               onChange={e=>setFilters(f=>({...f, egitim_adi:e.target.value}))}/>
-          </div>
-          <div>
-            <label className="block text-xs mb-1">Eğitmen Adı</label>
-            <input type="text" className="w-32 border" value={filters.egitmen_adi}
-              onChange={e=>setFilters(f=>({...f, egitmen_adi:e.target.value}))}/>
-          </div>
-          <div>
-            <label className="block text-xs mb-1">Çekim Sorumlusu</label>
-            <select className="w-32 border" value={filters.cekim_sorumlusu}
-              onChange={e=>setFilters(f=>({...f, cekim_sorumlusu:e.target.value}))}>
-              <option value="">Hepsi</option>
-              {sorumluOpt.map(opt=>(<option key={opt}>{opt}</option>))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs mb-1">Çekim Durumu</label>
-            <select className="w-32 border" value={filters.cekim_durumu}
-              onChange={e=>setFilters(f=>({...f, cekim_durumu:e.target.value}))}>
-              <option value="">Hepsi</option>
-              {cekimDurumuOpt.map(opt=>(<option key={opt}>{opt}</option>))}
-            </select>
-          </div>
+          <input type="text" className="w-32 border" placeholder="Eğitmen Adı" value={filters.egitmen_adi}
+            onChange={e=>setFilters(f=>({...f, egitmen_adi:e.target.value}))}/>
+          <select className="w-32 border" value={filters.cekim_sorumlusu}
+            onChange={e=>setFilters(f=>({...f, cekim_sorumlusu:e.target.value}))}>
+            <option value="">Çekim Sorumlusu</option>
+            {sorumluOpt.map(opt=>(<option key={opt}>{opt}</option>))}
+          </select>
+          <select className="w-32 border" value={filters.cekim_durumu}
+            onChange={e=>setFilters(f=>({...f, cekim_durumu:e.target.value}))}>
+            <option value="">Çekim Durumu</option>
+            {cekimDurumuOpt.map(opt=>(<option key={opt}>{opt}</option>))}
+          </select>
           <button onClick={resetFilters} className="text-xs text-gray-600 underline ml-2">Filtreleri Temizle</button>
         </div>
         <div className="bg-white shadow rounded overflow-x-auto">
@@ -137,33 +105,32 @@ export default function CekimTakip() {
               </tr>
             </thead>
             <tbody>
-            {filteredData.map((row, idx)=>(
-              <tr key={idx} className={row.cekim_durumu==="Bitti" ? "bg-green-100" : ""}>
-                <td>
-                  <button onClick={()=>openModal(idx)} className="text-xs text-blue-600 mr-2">✏️</button>
-                  <button onClick={()=>handleDelete(idx)} className="text-xs text-red-600">🗑️</button>
-                </td>
-                <td>{row.egitim_adi}</td>
-                <td>{row.egitmen_adi}</td>
-                <td>{row.cekim_sorumlusu}</td>
-                <td>{row.cekim_durumu}</td>
-                <td>{row.notlar}</td>
-              </tr>
-            ))}
-            {filteredData.length===0 && (<tr>
-              <td colSpan={7} className="text-center text-gray-400">Veri yok.</td>
-            </tr>)}
+              {filteredData.map((row, idx)=>(
+                <tr key={idx} className={row.cekim_durumu==="Bitti" ? "bg-green-100" : ""}>
+                  <td>
+                    <button onClick={()=>openModal(idx)} className="text-xs text-blue-600 mr-2">✏️</button>
+                    <button onClick={()=>handleDelete(idx)} className="text-xs text-red-600">🗑️</button>
+                  </td>
+                  <td>{row.egitim_adi}</td>
+                  <td>{row.egitmen_adi}</td>
+                  <td>{row.cekim_sorumlusu}</td>
+                  <td>{row.cekim_durumu}</td>
+                  <td>{row.notlar}</td>
+                </tr>
+              ))}
+              {filteredData.length===0 && (<tr>
+                <td colSpan={7} className="text-center text-gray-400">Veri yok.</td>
+              </tr>)}
             </tbody>
           </table>
         </div>
       </main>
-      {/* MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded p-6 w-full max-w-xl">
             <h3 className="mb-4 font-bold text-lg">{editingIndex!==null?'Düzenle':'Yeni Çekim Kaydı'}</h3>
             <form className="grid gap-3" onSubmit={handleSubmit}>
-              <input placeholder="Eğitim Adı" value={formData.egitim_adi||''} 
+              <input placeholder="Eğitim Adı" value={formData.egitim_adi||''}
                      onChange={e=>setFormData(f=>({...f, egitim_adi:e.target.value}))} className="border p-2"/>
               <input placeholder="Eğitmen Adı" value={formData.egitmen_adi||''}
                      onChange={e=>setFormData(f=>({...f, egitmen_adi:e.target.value}))} className="border p-2"/>
