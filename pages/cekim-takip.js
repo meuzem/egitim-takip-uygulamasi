@@ -196,7 +196,52 @@ export default function CekimTakip() {
                 <label className="block text-sm font-medium mb-2">Video Kodu</label>
                 <input type="text" value={formData.videKodu || ''} onChange={(e) => setFormData({...formData, videKodu: e.target.value})} className="w-full" />
               </div>
-              <div className="md:col-span-2">
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">Ön Çekim</label>
+                <input type="text" value={formData.onCekim || ''} onChange={(e) => setFormData({...formData, onCekim: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Fotoğraf Çekimi</label>
+                <input type="text" value={formData.fotografCekimi || ''} onChange={(e) => setFormData({...formData, fotografCekimi: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Fotoğraf Tarihi</label>
+                <input type="date" value={formData.fotografTarih || ''} onChange={(e) => setFormData({...formData, fotografTarih: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Çekim Kontrol</label>
+                <input type="text" value={formData.cekimKontrol || ''} onChange={(e) => setFormData({...formData, cekimKontrol: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Kontrol Tarihi</label>
+                <input type="date" value={formData.kontrolTarih || ''} onChange={(e) => setFormData({...formData, kontrolTarih: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Tasnif</label>
+                <input type="text" value={formData.tasnif || ''} onChange={(e) => setFormData({...formData, tasnif: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Dip Ses</label>
+                <input type="text" value={formData.dipSes || ''} onChange={(e) => setFormData({...formData, dipSes: e.target.value})} className="w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Çekim Tamamlandı</label>
+                <select value={formData.cekimTamamlandi || ''} onChange={(e) => setFormData({...formData, cekimTamamlandi: e.target.value})} className="w-full">
+                  <option value="">Seçiniz</option>
+                  <option value="Evet">Evet</option>
+                  <option value="Hayır">Hayır</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Synology</label>
+                <select value={formData.synology || ''} onChange={(e) => setFormData({...formData, synology: e.target.value})} className="w-full">
+                  <option value="">Seçiniz</option>
+                  <option value="Evet">Evet</option>
+                  <option value="Hayır">Hayır</option>
+                </select>
+              </div>
+<div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-2">Notlar</label>
                 <textarea value={formData.notlar || ''} onChange={(e) => setFormData({...formData, notlar: e.target.value})} rows="3" className="w-full"></textarea>
               </div>
