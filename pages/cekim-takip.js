@@ -14,7 +14,6 @@ export default function CekimTakip() {
       const res = await fetch('/api/sheets?sheet=Çekim Takip');
       const result = await res.json();
       if (result.success) {
-        // Sort data: "Bitti" to bottom, others maintain order
         const sortedData = result.data.sort((a, b) => {
           const aStatus = (a.cekim_durumu || '').toLowerCase();
           const bStatus = (b.cekim_durumu || '').toLowerCase();
@@ -50,15 +49,15 @@ export default function CekimTakip() {
       row.cekim_notu || ''
     ]);
 
-    let csv = headers.join(',') + '\n';
+    let csv = headers.join(',') + '\\n';
     rows.forEach(row => {
-      csv += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + '\n';
+      csv += row.map(cell => '"' + String(cell).replace(/"/g, '""') + '"').join(',') + '\\n';
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `cekim-takip-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = 'cekim-takip-' + new Date().toISOString().split('T')[0] + '.csv';
     link.click();
   };
 
@@ -181,7 +180,7 @@ export default function CekimTakip() {
                 </thead>
                 <tbody>
                   {filteredData.map((row, index) => (
-                    <tr key={index} className={`border-b ${getRowClass(row.cekim_durumu)}`}>
+                    <tr key={index} className={'border-b ' + getRowClass(row.cekim_durumu)}>
                       {editingRow === index ? (
                         <>
                           <td className="py-2 px-4">{index + 1}</td>
@@ -298,11 +297,11 @@ export default function CekimTakip() {
                           <td className="py-2 px-4">{row.cekim_saati}</td>
                           <td className="py-2 px-4">{row.cekim_suresi}</td>
                           <td className="py-2 px-4">
-                            <span className={`px-2 py-1 rounded ${
+                            <span className={'px-2 py-1 rounded ' + (
                               (row.cekim_durumu || '').toLowerCase() === 'bitti'
                                 ? 'bg-green-200 text-green-800 font-semibold'
                                 : 'bg-gray-200 text-gray-800'
-                            }`}>
+                            )}>
                               {row.cekim_durumu}
                             </span>
                           </td>
