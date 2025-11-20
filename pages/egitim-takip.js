@@ -12,7 +12,6 @@ export default function EgitimTakip() {
       const res = await fetch('/api/sheets?sheet=Eğitim Takip');
       const result = await res.json();
       if (result.success) {
-        // Sort data: "Yayında" to bottom, others maintain order
         const sortedData = result.data.sort((a, b) => {
           const aStatus = (a.durum || '').toLowerCase();
           const bStatus = (b.durum || '').toLowerCase();
@@ -49,15 +48,15 @@ export default function EgitimTakip() {
       row.not || ''
     ]);
 
-    let csv = headers.join(',') + '\n';
+    let csv = headers.join(',') + '\\n';
     rows.forEach(row => {
-      csv += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + '\n';
+      csv += row.map(cell => '"' + String(cell).replace(/"/g, '""') + '"').join(',') + '\\n';
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `egitim-takip-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = 'egitim-takip-' + new Date().toISOString().split('T')[0] + '.csv';
     link.click();
   };
 
@@ -146,7 +145,7 @@ export default function EgitimTakip() {
                 </thead>
                 <tbody>
                   {filteredData.map((row, index) => (
-                    <tr key={index} className={`border-b ${getRowClass(row.durum)}`}>
+                    <tr key={index} className={'border-b ' + getRowClass(row.durum)}>
                       <td className="py-2 px-4">{index + 1}</td>
                       <td className="py-2 px-4">{row.egitmen}</td>
                       <td className="py-2 px-4">{row.ders}</td>
@@ -157,11 +156,11 @@ export default function EgitimTakip() {
                       <td className="py-2 px-4">{row.saat}</td>
                       <td className="py-2 px-4">{row.sure}</td>
                       <td className="py-2 px-4">
-                        <span className={`px-2 py-1 rounded ${
+                        <span className={'px-2 py-1 rounded ' + (
                           (row.durum || '').toLowerCase() === 'yayında' 
                             ? 'bg-green-200 text-green-800 font-semibold'
                             : 'bg-gray-200 text-gray-800'
-                        }`}>
+                        )}>
                           {row.durum}
                         </span>
                       </td>
