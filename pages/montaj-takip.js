@@ -12,7 +12,6 @@ export default function MontajTakip() {
       const res = await fetch('/api/sheets?sheet=Montaj Takip');
       const result = await res.json();
       if (result.success) {
-        // Sort data: "Bitti" to bottom, others maintain order
         const sortedData = result.data.sort((a, b) => {
           const aStatus = (a.montaj_durumu || '').toLowerCase();
           const bStatus = (b.montaj_durumu || '').toLowerCase();
@@ -49,15 +48,15 @@ export default function MontajTakip() {
       row.montaj_notu || ''
     ]);
 
-    let csv = headers.join(',') + '\n';
+    let csv = headers.join(',') + '\\n';
     rows.forEach(row => {
-      csv += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + '\n';
+      csv += row.map(cell => '"' + String(cell).replace(/"/g, '""') + '"').join(',') + '\\n';
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `montaj-takip-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = 'montaj-takip-' + new Date().toISOString().split('T')[0] + '.csv';
     link.click();
   };
 
@@ -147,7 +146,7 @@ export default function MontajTakip() {
                 </thead>
                 <tbody>
                   {filteredData.map((row, index) => (
-                    <tr key={index} className={`border-b ${getRowClass(row.montaj_durumu)}`}>
+                    <tr key={index} className={'border-b ' + getRowClass(row.montaj_durumu)}>
                       <td className="py-2 px-4">{index + 1}</td>
                       <td className="py-2 px-4">{row.egitmen}</td>
                       <td className="py-2 px-4">{row.ders}</td>
@@ -158,11 +157,11 @@ export default function MontajTakip() {
                       <td className="py-2 px-4">{row.montaj_bitis}</td>
                       <td className="py-2 px-4">{row.montaj_suresi}</td>
                       <td className="py-2 px-4">
-                        <span className={`px-2 py-1 rounded ${
+                        <span className={'px-2 py-1 rounded ' + (
                           (row.montaj_durumu || '').toLowerCase() === 'bitti'
                             ? 'bg-green-200 text-green-800 font-semibold'
                             : 'bg-gray-200 text-gray-800'
-                        }`}>
+                        )}>
                           {row.montaj_durumu}
                         </span>
                       </td>
